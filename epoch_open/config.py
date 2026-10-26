@@ -51,6 +51,31 @@ class Config:
         return take3.pathlengths_for_plate(self.plate_serial)
 
 
+def config_path() -> Path:
+    """Where the settings file lives: beside the program."""
+    return _program_directory() / CONFIG_NAME
+
+
+def save(cfg: Config, path: Path | None = None) -> Path:
+    """Write the settings back, so a new plate needs no rebuild and no text editor.
+
+    Writes to a temporary file and replaces, so an interrupted save cannot leave
+    the program with a half-written config it refuses to read.
+    """
+    path = path or config_path()
+    data = {
+        "reader_serial": cfg.reader_serial,
+        "plate_serial": cfg.plate_serial,
+        "pathlengths_mm": {k: round(float(v), 4)
+                           for k, v in sorted(cfg.pathlengths_mm.items())},
+    }
+    temp = path.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8")
+    temp.replace(path)
+    return path
+
+
 def load(path: Path | None = None) -> Config:
     """Read the config file if there is one. A missing file is not an error."""
     path = path or (_program_directory() / CONFIG_NAME)

@@ -40,9 +40,25 @@ TEXT = {
     # "Camino optico" is the correct term and it is what the data sheet says, but
     # it told the reader nothing. The physical quantity is how thick the drop is
     # where the light crosses it, so the label says that.
-    # Only the fallback is shown on screen; both go into the Excel.
+    "plate_calibrated": "calibrada",
+    "plate_uncalibrated": "SIN CALIBRAR",
+    "plate_change": "Cambiar placa...",
     "path_nominal": ("Sin hoja de calibracion de esta placa: se usa 0,5 mm "
                      "nominal, las concentraciones pueden desviarse ~2%."),
+    "plate_dialog_title": "Placa Take3",
+    "plate_dialog_help": ("Copia aqui los valores de la hoja 'Take3 Pathlength Data "
+                          "Sheet' que vino con la placa. Son 16 numeros, en mm, "
+                          "alrededor de 0,5."),
+    "plate_serial_label": "Numero de serie de la placa:",
+    "plate_save": "Guardar",
+    "plate_cancel": "Cancelar",
+    "plate_nominal_btn": "Usar 0,5 mm nominal",
+    "plate_saved": "Placa {serial} guardada. Se usara desde ahora.",
+    "plate_bad_serial": "Escribe el numero de serie de la placa.",
+    "plate_bad_value": ("{well}: '{value}' no es un numero valido. Los caminos "
+                        "opticos van entre 0,2 y 1,2 mm (normalmente ~0,5)."),
+    "plate_incomplete": ("Faltan {n} pozos. Completa los 16 valores de la hoja, "
+                         "o elige 'Usar 0,5 mm nominal'."),
     "blank_pending": "Falta leer el blanco",
     "blank_done": "Blanco leido: {wells}",
     "batch_empty": "Lote vacio",
@@ -119,6 +135,7 @@ class App(tk.Tk):
         self.sample_buttons: dict[str, tk.Button] = {}
 
         self.sample_names: dict[str, str] = {}
+        self.plate_serial = CONFIG.plate_serial
         self.pathlengths = CONFIG.pathlengths
 
         self.blank: dict | None = None
@@ -231,8 +248,14 @@ class App(tk.Tk):
         frame = ttk.Frame(parent)
         frame.pack(fill="x", pady=(0, 6))
 
-        ttk.Label(frame, text=TEXT["plate"].format(serial=PLATE_SERIAL),
-                  style="Head.TLabel").pack(anchor="w", pady=(0, 4))
+        plate_row = ttk.Frame(frame)
+        plate_row.pack(fill="x", pady=(0, 4))
+        self.plate_label = ttk.Label(plate_row, style="Head.TLabel")
+        self.plate_label.pack(side="left")
+        self.plate_state = ttk.Label(plate_row)
+        self.plate_state.pack(side="left", padx=(8, 0))
+        ttk.Button(plate_row, text=TEXT["plate_change"],
+                   command=self._change_plate).pack(side="right")
 
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=3)
@@ -250,13 +273,10 @@ class App(tk.Tk):
         self.wavelength_label = ttk.Label(frame, text="", style="Muted.TLabel")
         self.wavelength_label.pack(anchor="w")
 
-        # Shown only when it is not the normal case. With the plate's own sheet
-        # loaded there is nothing for the user to do about it, and it goes in the
-        # Excel either way for traceability. Without the sheet the results are up
-        # to 2.4% off, which she should see.
-        if not self.pathlengths:
-            ttk.Label(frame, text=TEXT["path_nominal"],
-                      style="Bad.TLabel", wraplength=330).pack(anchor="w")
+        # Only shown when the plate has no calibration sheet, because then the
+        # results are up to 2.4% off and there is something to do about it.
+        self.path_warning = ttk.Label(frame, text=TEXT["path_nominal"],
+                                      style="Bad.TLabel", wraplength=330)
 
     def _build_grid(self, parent, title, selection, buttons, nameable) -> None:
         frame = ttk.LabelFrame(parent, text=title, padding=8,
@@ -366,6 +386,39 @@ class App(tk.Tk):
         for name in list(selection):
             self._toggle(name, selection, buttons)
 
+    def _refresh_plate(self) -> None:
+        """Show which plate is loaded and whether its sheet is in."""
+        self.plate_label.configure(
+            text=TEXT["plate"].format(serial=self.plate_serial or "?"))
+        calibrated = bool(self.pathlengths)
+        self.plate_state.configure(
+            text=TEXT["plate_calibrated"] if calibrated
+            else TEXT["plate_uncalibrated"],
+            style="Good.TLabel" if calibrated else "Bad.TLabel",
+        )
+        if calibrated:
+            self.path_warning.pack_forget()
+        else:
+            self.path_warning.pack(anchor="w", pady=(2, 0))
+
+    def _change_plate(self) -> None:
+        dialog = PlateDialog(self, self.plate_serial, self.pathlengths)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+
+        serial, table = dialog.result
+        self.plate_serial = serial
+        self.pathlengths = table or None
+        CONFIG.plate_serial = serial
+        CONFIG.pathlengths_mm = dict(table or {})
+        try:
+            config.save(CONFIG)
+        except OSError as exc:
+            messagebox.showwarning(TEXT["title"], str(exc))
+        self._refresh_plate()
+        self._say(TEXT["plate_saved"].format(serial=serial))
+
     def _refresh_state(self) -> None:
         wavelengths = wavelengths_for(self.sample_type.get(), self.with_230.get())
         self.wavelength_label.configure(
@@ -386,6 +439,7 @@ class App(tk.Tk):
                                             total=len(self.results))
             if self.results else TEXT["batch_empty"]
         )
+        self._refresh_plate()
 
     def _say(self, message: str) -> None:
         self.status.configure(text=message)
@@ -509,7 +563,7 @@ class App(tk.Tk):
             return
 
         metadata = {
-            "Placa Take3": PLATE_SERIAL,
+            "Placa Take3": self.plate_serial,
             "Espesor de gota": ("medido pozo a pozo, hoja de la placa"
                                 if self.pathlengths else "0,5 mm nominal"),
             "Lector": self.info.model,
@@ -548,6 +602,130 @@ class App(tk.Tk):
         self._read_blank()
         self._read_samples()
         self._read_samples()
+
+
+class PlateDialog(tk.Toplevel):
+    """Enter a Take3 plate and the pathlengths from its data sheet.
+
+    Laid out the way the sheet is, rows A-H against columns 2 and 3, so the
+    numbers can be copied straight across without counting places. The program
+    ships as a single .exe, so this is the only way an owner can register a
+    replacement plate.
+    """
+
+    def __init__(self, parent, serial: str | None, table: dict | None):
+        super().__init__(parent)
+        self.title(TEXT["plate_dialog_title"])
+        self.transient(parent)
+        self.resizable(False, False)
+        self.configure(bg=CANVAS)
+        self.result: tuple[str, dict] | None = None
+
+        body = ttk.Frame(self, padding=16)
+        body.pack(fill="both", expand=True)
+
+        ttk.Label(body, text=TEXT["plate_dialog_help"], wraplength=380,
+                  style="Muted.TLabel").pack(anchor="w", pady=(0, 12))
+
+        row = ttk.Frame(body)
+        row.pack(fill="x", pady=(0, 12))
+        ttk.Label(row, text=TEXT["plate_serial_label"]).pack(side="left")
+        self.serial = tk.StringVar(value=serial or "")
+        serial_entry = ttk.Entry(row, textvariable=self.serial, width=14)
+        serial_entry.pack(side="left", padx=(8, 0))
+
+        grid = ttk.LabelFrame(body, text="mm", padding=10,
+                              style="Card.TLabelframe")
+        grid.pack()
+        inner = ttk.Frame(grid, style="Card.TFrame")
+        inner.pack()
+
+        for position, column in enumerate(take3.COLUMNS):
+            ttk.Label(inner, text=str(column), width=9, anchor="center",
+                      style="CardMuted.TLabel").grid(row=0, column=position + 1)
+
+        self.entries: dict[str, tk.StringVar] = {}
+        for row_index, letter in enumerate(take3.ROWS):
+            ttk.Label(inner, text=letter, width=2, anchor="e",
+                      style="CardMuted.TLabel").grid(
+                row=row_index + 1, column=0, padx=(0, 6))
+            for position, column in enumerate(take3.COLUMNS):
+                well = f"{letter}{column}"
+                var = tk.StringVar(
+                    value=f"{table[well]:.4f}" if table and well in table else "")
+                self.entries[well] = var
+                ttk.Entry(inner, textvariable=var, width=9,
+                          justify="center").grid(
+                    row=row_index + 1, column=position + 1, padx=2, pady=2)
+
+        buttons = ttk.Frame(body)
+        buttons.pack(fill="x", pady=(14, 0))
+        ttk.Button(buttons, text=TEXT["plate_cancel"],
+                   command=self.destroy).pack(side="right")
+        tk.Button(buttons, text=TEXT["plate_save"], command=self._save,
+                  bg=ACTION, fg=ACTION_INK, relief="flat", bd=0,
+                  padx=16, pady=6, font=("TkDefaultFont", 10, "bold"),
+                  cursor="hand2").pack(side="right", padx=(0, 8))
+        ttk.Button(buttons, text=TEXT["plate_nominal_btn"],
+                   command=self._nominal).pack(side="left")
+
+        serial_entry.focus_set()
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.grab_set()
+
+    # ------------------------------------------------------------------
+
+    def _serial_or_complain(self) -> str | None:
+        serial = self.serial.get().strip()
+        if not serial:
+            messagebox.showwarning(TEXT["plate_dialog_title"],
+                                   TEXT["plate_bad_serial"], parent=self)
+            return None
+        return serial
+
+    def _nominal(self) -> None:
+        """Register the plate without a sheet. Honest, and flagged on the screen."""
+        serial = self._serial_or_complain()
+        if serial:
+            self.result = (serial, {})
+            self.destroy()
+
+    def _save(self) -> None:
+        serial = self._serial_or_complain()
+        if not serial:
+            return
+
+        table: dict[str, float] = {}
+        missing = []
+        for well, var in self.entries.items():
+            text = var.get().strip().replace(",", ".")
+            if not text:
+                missing.append(well)
+                continue
+            try:
+                value = float(text)
+            except ValueError:
+                messagebox.showwarning(
+                    TEXT["plate_dialog_title"],
+                    TEXT["plate_bad_value"].format(well=well, value=var.get()),
+                    parent=self)
+                return
+            if not 0.2 <= value <= 1.2:
+                messagebox.showwarning(
+                    TEXT["plate_dialog_title"],
+                    TEXT["plate_bad_value"].format(well=well, value=var.get()),
+                    parent=self)
+                return
+            table[well] = value
+
+        if missing:
+            messagebox.showwarning(
+                TEXT["plate_dialog_title"],
+                TEXT["plate_incomplete"].format(n=len(missing)), parent=self)
+            return
+
+        self.result = (serial, table)
+        self.destroy()
 
 
 def connect_backend(force_simulator: bool = False):

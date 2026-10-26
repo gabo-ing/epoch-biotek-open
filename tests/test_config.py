@@ -77,3 +77,32 @@ class TestBrokenFilesDoNotStopTheProgram:
     def test_empty_file_falls_back(self):
         p = write("empty.json", "")
         assert config.load(p).plate_serial == "243819"
+
+
+class TestSaving:
+    def test_a_saved_config_reads_back(self):
+        directory = Path(__file__).resolve().parent / "_out"
+        directory.mkdir(exist_ok=True)
+        path = directory / "roundtrip.json"
+
+        cfg = config.Config(reader_serial=None, plate_serial="999888",
+                            pathlengths_mm={"A2": 0.5111, "H3": 0.4982})
+        config.save(cfg, path)
+
+        back = config.load(path)
+        assert back.plate_serial == "999888"
+        assert back.pathlengths["A2"] == 0.5111
+        assert back.pathlengths["H3"] == 0.4982
+
+    def test_saving_leaves_no_temporary_file(self):
+        directory = Path(__file__).resolve().parent / "_out"
+        path = directory / "clean.json"
+        config.save(config.Config(plate_serial="1"), path)
+        assert not path.with_suffix(".json.tmp").exists()
+
+    def test_saved_pathlengths_override_the_builtin_plate(self):
+        directory = Path(__file__).resolve().parent / "_out"
+        path = directory / "override.json"
+        config.save(config.Config(plate_serial="243819",
+                                  pathlengths_mm={"A2": 0.6000}), path)
+        assert config.load(path).pathlengths["A2"] == 0.6

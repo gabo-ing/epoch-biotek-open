@@ -1,7 +1,22 @@
 # Using this with a different Epoch and a different Take3
 
-Nothing needs recompiling. Copy `epoch_open.example.json` to `epoch_open.json`,
-put it beside `EpochTake3.exe`, and edit it.
+Nothing needs recompiling, and you do not have to edit any file by hand.
+
+The header shows which Take3 is loaded and whether its calibration sheet is in:
+
+    Placa Take3  243819  calibrada          <- values from the plate's data sheet
+    Placa Take3  999999  SIN CALIBRAR       <- falling back to 0.5 mm nominal
+
+Press **Cambiar placa...** to register a plate. The dialog is laid out like the
+Take3 Pathlength Data Sheet, rows A-H against columns 2 and 3, so the numbers can
+be copied straight across. It is saved to `epoch_open.json` beside the program and
+used from then on.
+
+If you have no sheet, **Usar 0,5 mm nominal** registers the plate without one. The
+header then says SIN CALIBRAR, because concentrations can be off by around 2%.
+
+The file can also be written by hand; copy `epoch_open.example.json` to
+`epoch_open.json` and edit it.
 
 ## 1. Your reader
 
