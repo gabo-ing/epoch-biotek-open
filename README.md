@@ -4,9 +4,9 @@ Free replacement software for a BioTek Epoch microplate spectrophotometer with a
 micro-volume plate, for RNA/DNA quantification.
 
 The lab owns the instrument. The vendor software's licence activations are exhausted, so
-the instrument is becoming unusable for want of a program to drive it. This project
-writes a new program that talks to the reader directly. It does not modify, patch,
-bypass or inspect the vendor software, and nothing here depends on it at runtime.
+the instrument was unusable. This project writes a new program that talks to the reader directly. 
+
+It does not modify, patch, bypass or inspect the vendor software, and nothing here depends on it at runtime.
 
 ## Who uses this
 
@@ -15,10 +15,10 @@ design more than anything technical does:
 
 - Ships as a **single `.exe`** on Windows. Double-click. No Python, no install, no
   console window, no config files to edit.
-- Main screen is a **Take3 plate layout** she clicks to mark loaded spots, copying the
-  Gen5 picker she already knows.
+- Main screen is a **Take3 plate layout**. Click to mark loaded spots, copying the
+  Gen5 picker already known.
 - Three buttons: **Read blank**, **Read samples**, **Save results**.
-- Results export to **xlsx**, the same format Gen5 produces, so everything she does with
+- Results export to **xlsx**, the same format Gen5 produces, so everything done with
   the file afterwards is unchanged.
 - Sample type (dsDNA / ssDNA / RNA) is a dropdown, defaulted to whatever the lab uses most.
 - Problems are reported in plain language next to the affected well, never as an error
@@ -75,7 +75,7 @@ arrived, are in `docs/QUANTIFICATION.md`.
 
 ## Using it with a different instrument
 
-Nothing is compiled in any more: copy `epoch_open.example.json` to
+Nothing is compiled in: copy `epoch_open.example.json` to
 `epoch_open.json` beside the program and edit it. See `docs/FOR_OTHER_LABS.md`.
 The one setting that genuinely matters is the pathlength table from your own
 Take3's data sheet.
