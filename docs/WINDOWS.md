@@ -1,0 +1,67 @@
+# Putting this on the lab's Windows laptop
+
+The end product is one `.exe` the technician double-clicks. No Python, no console, no
+settings file. This describes building it; it has not been run yet, because the build
+has to happen on Windows.
+
+## 1. The USB driver (once per machine)
+
+The Epoch is an FTDI serial device. Windows needs the FTDI VCP driver:
+
+- From the original disks: `USB driver/CDM20600.exe`. It works, but it is from 2009.
+- Better: the current VCP driver from <https://ftdichip.com/drivers/vcp-drivers/>.
+  Same driver family, properly signed for current Windows.
+
+Install it **before** plugging the reader in. Afterwards, Device Manager should show a
+"USB Serial Port (COMn)" under Ports. The software finds the port by itself using the
+instrument's serial number, so the COM number never has to be typed anywhere.
+
+Linux needs nothing: `ftdi_sio` is in the kernel.
+
+## 2. Build the exe (on the Windows machine, once)
+
+Install Python 3.11 or newer from python.org, ticking **"Add python.exe to PATH"**.
+The python.org build includes tkinter; the Microsoft Store build has been known not
+to, so avoid it.
+
+    pip install pyserial pyinstaller
+    pyinstaller --onefile --windowed --name EpochTake3 --icon NONE run_gui.py
+
+- `--onefile` produces a single `dist\EpochTake3.exe`.
+- `--windowed` suppresses the console window, so no black box appears behind the app.
+
+The only third-party dependency is **pyserial**. The xlsx writer is deliberately
+hand-rolled against the standard library, so nothing else has to be bundled.
+
+## 3. Check before handing it over
+
+1. Run the exe with **no reader attached**. It must open, show the red simulator
+   banner, and let a fake read be taken and saved. If it crashes here, it will crash
+   in front of the technician.
+2. Open a saved file in the lab's own Excel — not just LibreOffice.
+3. With the reader attached, confirm it is found automatically and reports serial
+   254717 and firmware 1.12.
+4. Run the paired validation in `docs/WISHLIST.md` before it is used for real results.
+
+## 4. Where it lives
+
+Put the exe somewhere stable (`C:\EpochTake3\`) and make a Desktop shortcut. Do not
+run it from a USB stick or the Downloads folder, where it will eventually be deleted
+by someone tidying up.
+
+## Status: built and working
+
+Built and run on the lab's Dell with Windows 11 on 26 October 2026. Confirmed:
+started with no reader attached and showed the red simulation banner; closed,
+attached the reader, restarted and the reader was detected; read a plate; exported
+an xlsx that Excel opened with no repair prompt.
+
+`build_windows.bat` in the project root does the whole build.
+
+## Known gaps
+- Windows may warn about an unsigned executable on first run ("Windows protected your
+  PC" -> More info -> Run anyway). Expected for an unsigned binary; it does not
+  recur once the file is trusted.
+- Antivirus sometimes dislikes PyInstaller one-file builds, because they unpack
+  themselves at startup. If that happens, build without `--onefile` and ship the
+  folder instead.

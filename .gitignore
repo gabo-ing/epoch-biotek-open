@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+tests/_out/
+build/
+dist/
+*.spec
+*.xlsx
+
+# Excluded by default - your call whether to publish these:
+#   screenshots/ holds photos of your paperwork and Gen5 exports with real
+#   sample names; captures/ holds USB traces (useful to others, ~6 MB).
+screenshots/
+captures/
