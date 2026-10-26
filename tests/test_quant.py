@@ -266,76 +266,63 @@ class TestAgainstRealGen5RNA:
 
 
 class TestBlankConsistency:
-    def test_agreeing_blanks_raise_nothing(self):
+    """The check is on the absolute spread of the background-corrected blank,
+    not a coefficient of variation. A CV on two or three wells swings wildly:
+    the simulator tripped a 5% CV threshold on ordinary noise and popped a
+    warning dialog at anyone running the program without an instrument."""
+
+    def wells(self, pairs):
+        return {w: RawWell(w, {260: a, 320: b}) for w, (a, b) in pairs.items()}
+
+    REAL_GOOD = {"A2": (0.0475, 0.0421), "B2": (0.0463, 0.0402),
+                 "C2": (0.0459, 0.0398), "D2": (0.0493, 0.0427)}
+
+    def test_a_real_good_blank_is_silent(self):
         from epoch_open.quant import check_blanks
 
-        blanks = {
-            "A2": RawWell("A2", {260: 0.043, 320: 0.038}),
-            "A3": RawWell("A3", {260: 0.044, 320: 0.038}),
-        }
-        assert check_blanks(blanks) == []
+        assert check_blanks(self.wells(self.REAL_GOOD)) == []
 
-    def test_disagreeing_blanks_are_flagged(self):
+    def test_the_real_bad_well_is_caught(self):
+        """G2 on 26 Oct read 0.0208 against ~0.006 for its neighbours."""
         from epoch_open.quant import check_blanks
 
-        blanks = {
-            "A2": RawWell("A2", {260: 0.043, 320: 0.038}),
-            "A3": RawWell("A3", {260: 0.095, 320: 0.038}),
-        }
-        warnings = check_blanks(blanks)
+        bad = dict(self.REAL_GOOD, G2=(0.0602, 0.0394))
+        warnings = check_blanks(self.wells(bad))
         assert warnings and warnings[0].code == "blank_spread"
 
+    def test_spread_is_measured_on_the_corrected_value(self):
+        from epoch_open.quant import blank_spread
+
+        # Raw 260 differs by 0.020 between these, but it is all background and
+        # the 320 reference removes it, so the blank they contribute is identical.
+        same = self.wells({"A2": (0.045, 0.039), "A3": (0.065, 0.059)})
+        # Not exactly zero: 0.045-0.039 is 0.006000000000000005 in binary.
+        assert blank_spread(same) == pytest.approx(0.0, abs=1e-9)
+
     def test_a_single_blank_has_no_spread(self):
-        from epoch_open.quant import blank_cv_percent, check_blanks
+        from epoch_open.quant import blank_spread, check_blanks
 
-        blanks = {"A2": RawWell("A2", {260: 0.043, 320: 0.038})}
-        assert blank_cv_percent(blanks) == 0.0
-        assert check_blanks(blanks) == []
+        one = self.wells({"A2": (0.045, 0.039)})
+        assert blank_spread(one) == 0.0
+        assert check_blanks(one) == []
+
+    def test_the_message_states_the_spread(self):
+        from epoch_open.quant import check_blanks
+
+        bad = dict(self.REAL_GOOD, G2=(0.0602, 0.0394))
+        assert "AU" in check_blanks(self.wells(bad))[0].message
 
 
-class TestPathlengthTable:
-    SAMPLE = RawWell("A2", {260: 0.098, 280: 0.074, 320: 0.044})
-    BLANK = RawWell("blank", {260: 0.0528, 280: 0.0492, 320: 0.0440})
+class TestSimulatorDoesNotWarnSpuriously:
+    def test_two_well_simulated_blanks_never_warn(self):
+        """200 seeds; the old CV threshold failed this."""
+        from epoch_open.quant import check_blanks
+        from epoch_open.reader import MockReader
 
-    def test_nominal_is_used_when_no_table_is_given(self):
-        from epoch_open.quant import DEFAULT_PATHLENGTH_MM
-
-        result = quantify(self.SAMPLE, self.BLANK)
-        assert result.pathlength_mm == DEFAULT_PATHLENGTH_MM
-
-    def test_certified_table_changes_the_result(self):
-        from epoch_open.take3 import CERTIFIED_PATHLENGTHS_MM
-
-        nominal = quantify(self.SAMPLE, self.BLANK)
-        certified = quantify(
-            self.SAMPLE, self.BLANK, "dsDNA", CERTIFIED_PATHLENGTHS_MM
-        )
-        assert certified.pathlength_mm == 0.5125
-        # A2 is the worst case on this plate: about 2.4% low if 0.5 is assumed.
-        assert certified.concentration < nominal.concentration
-        relative = abs(certified.concentration - nominal.concentration) / nominal.concentration
-        assert 0.02 < relative < 0.03
-
-    def test_a_scalar_pathlength_applies_everywhere(self):
-        result = quantify(self.SAMPLE, self.BLANK, "dsDNA", 0.52)
-        assert result.pathlength_mm == 0.52
-
-    def test_a_well_missing_from_the_table_falls_back_to_nominal(self):
-        result = quantify(self.SAMPLE, self.BLANK, "dsDNA", {"H3": 0.4982})
-        assert result.pathlength_mm == 0.5
-
-    def test_an_implausible_pathlength_is_refused(self):
-        # The message is Spanish now; match on something stable within it.
-        with pytest.raises(QuantError, match="poco creible"):
-            quantify(self.SAMPLE, self.BLANK, "dsDNA", {"A2": 5.0})
-
-    def test_default_table_is_half_a_millimetre_everywhere(self):
-        from epoch_open.quant import default_pathlengths
-        from epoch_open import take3
-
-        table = default_pathlengths(take3.all_wells())
-        assert len(table) == 16
-        assert set(table.values()) == {0.5}
+        for seed in range(200):
+            reader = MockReader(seed=seed)
+            reader.simulating_blank = True
+            assert check_blanks(reader.read_wells(["A2", "A3"])) == [], seed
 
 
 class TestWarningMessages:

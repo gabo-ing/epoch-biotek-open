@@ -118,9 +118,10 @@ MESSAGES = {
         "las dos superficies."
     ),
     "blank_spread": (
-        "Los pozos del blanco no coinciden entre si ({cv:.1f}% de dispersion a "
-        "260 nm). Limpia la placa, vuelve a cargar el agua y repite el blanco "
-        "antes de leer muestras: todos los resultados dependen de esto."
+        "Los pozos del blanco no coinciden entre si: {spread:.4f} AU de diferencia "
+        "entre el mayor y el menor ({cv:.1f}% a 260 nm). Limpia la placa, vuelve a "
+        "cargar el agua y repite el blanco antes de leer muestras: todos los "
+        "resultados dependen de esto."
     ),
     "pathlength": (
         "{well}: camino optico de {value} mm poco creible para un pozo Take3 "
@@ -359,8 +360,28 @@ def blank_cv_percent(blanks: dict[str, RawWell], wavelength: int = 260) -> float
     return (variance ** 0.5) / abs(mean) * 100.0
 
 
-# Above this spread between blank wells, the blank is not trustworthy.
-BLANK_CV_LIMIT_PERCENT = 5.0
+def blank_spread(blanks: dict[str, RawWell]) -> float:
+    """Range of the background-corrected blank across wells, in absorbance units.
+
+    This, not the CV, is what matters. The raw readings differ well to well by a
+    few percent, but most of that is background that the 320 nm reference removes.
+    What gets subtracted from every sample is (260 - 320), so the spread of *that*
+    is the error a bad blank injects.
+
+    A coefficient of variation on two or three wells is also wildly unstable: a
+    simulated blank of two wells could exceed a 5% CV on ordinary noise and warn
+    about nothing.
+    """
+    deltas = [b.corrected(260) for b in blanks.values() if 260 in b.readings]
+    if len(deltas) < 2:
+        return 0.0
+    return max(deltas) - min(deltas)
+
+
+# Above this spread the blank is not trustworthy. A blank is ~0.006 AU, and at
+# 0.5 mm an error of 0.004 AU is 4 ng/uL of dsDNA: nothing on a 400 ng/uL sample,
+# ruinous on a 10 ng/uL one.
+BLANK_SPREAD_LIMIT_AU = 0.004
 
 
 def check_blanks(blanks: dict[str, RawWell]) -> list["Warning_"]:
@@ -369,9 +390,10 @@ def check_blanks(blanks: dict[str, RawWell]) -> list["Warning_"]:
     if len(blanks) < 2:
         return warnings
 
-    cv = blank_cv_percent(blanks, 260)
-    if cv > BLANK_CV_LIMIT_PERCENT:
-        warnings.append(warn("blank_spread", cv=cv))
+    spread = blank_spread(blanks)
+    if spread > BLANK_SPREAD_LIMIT_AU:
+        warnings.append(warn("blank_spread", spread=spread,
+                             cv=blank_cv_percent(blanks, 260)))
     return warnings
 
 

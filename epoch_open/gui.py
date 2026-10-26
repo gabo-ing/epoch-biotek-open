@@ -69,20 +69,35 @@ TEXT = {
 
 SAMPLE_TYPES = ("dsDNA", "ssDNA", "RNA", "protein")
 
-# The plate this lab uses. Its certified pathlengths ship with the software, so the
-# data sheet is never retyped. Another plate falls back to the 0.5 mm nominal.
-PLATE_SERIAL = "243819"
+# One place for colour, so the screen stays coherent. Greens mean "ready" or
+# "chosen", red means "stop", amber marks a row that needs a second look.
+INK        = "#1f2933"      # main text
+MUTED      = "#5c6b7a"      # hints and secondary labels
+LINE       = "#d4dae0"      # borders
+CANVAS     = "#f4f6f8"      # window background
+PANEL      = "#ffffff"      # cards
+CHOSEN     = "#4f9d3a"      # a selected well
+CHOSEN_INK = "#ffffff"
+EMPTY      = "#fbfcfd"      # an unselected well
+GOOD       = "#1b5e20"      # connected, blank done
+BAD        = "#b00020"      # simulation, blank missing
+WARN_ROW   = "#fff6e6"      # a result with something to say
+ACTION     = "#2f6fb0"      # the three main buttons
+ACTION_INK = "#ffffff"
 
-# The reader this lab owns; used so the software picks the right instrument if
-# more than one FTDI device is attached.
-PLATE_READER_SERIAL = "254717"
+# Read from epoch_open.json beside the program; see epoch_open/config.py. Nothing
+# here is tied to one lab: a different reader and a different Take3 plate need a
+# config file, not a rebuild.
+CONFIG = config.load()
+PLATE_SERIAL = CONFIG.plate_serial
+PLATE_READER_SERIAL = CONFIG.reader_serial
 
 
 class App(tk.Tk):
     def __init__(self, backend=None):
         super().__init__()
         self.title(TEXT["title"])
-        self.minsize(1080, 700)
+        self.minsize(1120, 720)
 
         self.backend = backend or MockReader()
         self.simulated = isinstance(self.backend, MockReader)
@@ -106,6 +121,7 @@ class App(tk.Tk):
         self.results: list = []          # (read_number, QuantResult)
         self.read_number = 0
 
+        self._style()
         self._build()
         self._refresh_state()
 
@@ -118,6 +134,43 @@ class App(tk.Tk):
         # data in it. Simulator only -- it will not move real hardware unasked.
         if os.environ.get("EPOCH_GUI_DEMO") == "1" and self.simulated:
             self.after(300, self._demo_run)
+
+    # ---------------------------------------------------------------- styling
+
+    def _style(self) -> None:
+        """Tk's default theme is the 1990s Motif look. 'clam' is plain but current."""
+        self.configure(bg=CANVAS)
+        style = ttk.Style(self)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+
+        base = ("TkDefaultFont", 10)
+        style.configure(".", background=CANVAS, foreground=INK, font=base)
+        style.configure("TFrame", background=CANVAS)
+        style.configure("TLabel", background=CANVAS, foreground=INK)
+        style.configure("Muted.TLabel", foreground=MUTED)
+        style.configure("Good.TLabel", foreground=GOOD)
+        style.configure("Bad.TLabel", foreground=BAD)
+        style.configure("Head.TLabel", font=("TkDefaultFont", 11, "bold"))
+
+        style.configure("Card.TLabelframe", background=PANEL,
+                        bordercolor=LINE, relief="solid", borderwidth=1)
+        style.configure("Card.TLabelframe.Label", background=PANEL,
+                        foreground=MUTED, font=("TkDefaultFont", 9, "bold"))
+        style.configure("Card.TFrame", background=PANEL)
+        style.configure("Card.TLabel", background=PANEL, foreground=INK)
+        style.configure("CardMuted.TLabel", background=PANEL, foreground=MUTED,
+                        font=("TkDefaultFont", 9))
+
+        style.configure("TButton", padding=(10, 5))
+        style.map("TButton", background=[("active", "#e8edf2")])
+
+        style.configure("Treeview", background=PANEL, fieldbackground=PANEL,
+                        rowheight=24, borderwidth=0)
+        style.configure("Treeview.Heading", font=("TkDefaultFont", 9, "bold"),
+                        padding=(4, 5))
+        style.configure("TCheckbutton", background=CANVAS)
+        style.configure("TCombobox", padding=3)
 
     # ---------------------------------------------------------------- layout
 
@@ -153,20 +206,21 @@ class App(tk.Tk):
 
         self.status = tk.Label(
             self, text=TEXT["instructions"], anchor="w", justify="left",
-            bg="#eef2f5", padx=10, pady=6,
+            bg="#e9eef3", fg=INK, padx=14, pady=9,
+            font=("TkDefaultFont", 9),
         )
         self.status.pack(fill="x", side="bottom")
 
     def _build_banner(self) -> None:
         if self.simulated:
-            text, bg = TEXT["simulated"], "#b00020"
+            text, bg = TEXT["simulated"], BAD
         else:
             text = TEXT["connected"].format(
                 model=self.info.model, serial=self.info.serial,
                 firmware=self.info.firmware, port=self.info.port,
             )
-            bg = "#1b5e20"
-        tk.Label(self, text=text, bg=bg, fg="white", pady=7,
+            bg = GOOD
+        tk.Label(self, text=text, bg=bg, fg="white", pady=9,
                  font=("TkDefaultFont", 11, "bold")).pack(fill="x")
 
     def _build_header(self, parent) -> None:
@@ -174,7 +228,7 @@ class App(tk.Tk):
         frame.pack(fill="x", pady=(0, 6))
 
         ttk.Label(frame, text=TEXT["plate"].format(serial=PLATE_SERIAL),
-                  font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
+                  style="Head.TLabel").pack(anchor="w", pady=(0, 4))
 
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=3)
@@ -189,47 +243,50 @@ class App(tk.Tk):
         ttk.Checkbutton(frame, text=TEXT["with_230"], variable=self.with_230,
                         command=self._refresh_state).pack(anchor="w")
 
-        self.wavelength_label = ttk.Label(frame, text="", foreground="#333")
+        self.wavelength_label = ttk.Label(frame, text="", style="Muted.TLabel")
         self.wavelength_label.pack(anchor="w")
 
         basis = TEXT["path_sheet"] if self.pathlengths else TEXT["path_nominal"]
-        ttk.Label(frame, text=basis, foreground="#1b5e20").pack(anchor="w")
+        ttk.Label(frame, text=basis, style="Good.TLabel").pack(anchor="w")
 
     def _build_grid(self, parent, title, selection, buttons, nameable) -> None:
-        frame = ttk.LabelFrame(parent, text=title, padding=5)
-        frame.pack(side="left", fill="y", padx=(0, 6))
+        frame = ttk.LabelFrame(parent, text=title, padding=8,
+                               style="Card.TLabelframe")
+        frame.pack(side="left", fill="y", padx=(0, 8))
 
         ttk.Label(frame, text=(TEXT["grid_hint_sample"] if nameable
                                else TEXT["grid_hint_blank"]),
-                  foreground="#555").pack()
+                  style="CardMuted.TLabel").pack(pady=(0, 6))
 
-        grid = ttk.Frame(frame)
+        grid = ttk.Frame(frame, style="Card.TFrame")
         grid.pack()
 
         for position, column in enumerate(take3.COLUMNS):
-            ttk.Label(grid, text=str(column), width=7, anchor="center").grid(
-                row=0, column=position + 1
-            )
+            ttk.Label(grid, text=str(column), width=7, anchor="center",
+                      style="CardMuted.TLabel").grid(row=0, column=position + 1)
 
         for row_index, row_letter in enumerate(take3.ROWS):
-            ttk.Label(grid, text=row_letter, width=2, anchor="e").grid(
-                row=row_index + 1, column=0, padx=(0, 3)
-            )
+            ttk.Label(grid, text=row_letter, width=2, anchor="e",
+                      style="CardMuted.TLabel").grid(
+                row=row_index + 1, column=0, padx=(0, 5))
             for position, column in enumerate(take3.COLUMNS):
                 name = f"{row_letter}{column}"
                 button = tk.Button(
-                    grid, text=name, width=6, bg="#f5f5f5", relief="raised",
-                    padx=0, pady=0,
+                    grid, text=name, width=7, bg=EMPTY, fg=INK,
+                    relief="flat", bd=0, highlightthickness=1,
+                    highlightbackground=LINE, highlightcolor=LINE,
+                    activebackground="#e8edf2", padx=0, pady=3,
+                    font=("TkDefaultFont", 9),
                     command=lambda n=name, s=selection, b=buttons: self._toggle(n, s, b),
                 )
-                button.grid(row=row_index + 1, column=position + 1, padx=1, pady=1)
+                button.grid(row=row_index + 1, column=position + 1, padx=2, pady=2)
                 if nameable:
                     button.bind("<Double-Button-1>",
                                 lambda _e, n=name: self._name_well(n))
                 buttons[name] = button
 
-        controls = ttk.Frame(frame)
-        controls.pack(fill="x", pady=(4, 0))
+        controls = ttk.Frame(frame, style="Card.TFrame")
+        controls.pack(fill="x", pady=(8, 0))
         if nameable:
             ttk.Button(controls, text=TEXT["all_samples"],
                        command=lambda: self._select_all(selection, buttons)).pack(
@@ -240,25 +297,29 @@ class App(tk.Tk):
 
         if nameable:
             ttk.Label(frame, text=TEXT["naming_hint"], wraplength=220,
-                      foreground="#555").pack(pady=(3, 0))
+                      style="CardMuted.TLabel").pack(pady=(6, 0))
 
     def _build_buttons(self, parent) -> None:
         frame = ttk.Frame(parent)
         frame.pack(fill="x", pady=(6, 0))
 
-        self.blank_label = ttk.Label(frame, text="", foreground="#b00020")
+        self.blank_label = ttk.Label(frame, text="", style="Bad.TLabel")
         self.blank_label.pack()
-        self.batch_label = ttk.Label(frame, text="", foreground="#333")
-        self.batch_label.pack(pady=(0, 4))
+        self.batch_label = ttk.Label(frame, text="", style="Muted.TLabel")
+        self.batch_label.pack(pady=(0, 8))
 
         for key, command in (("read_blank", self._read_blank),
                              ("read_samples", self._read_samples),
                              ("end_batch", self._end_batch)):
-            tk.Button(frame, text=TEXT[key], command=command, height=2,
-                      font=("TkDefaultFont", 10, "bold")).pack(fill="x", pady=2)
+            tk.Button(frame, text=TEXT[key], command=command,
+                      bg=ACTION, fg=ACTION_INK, activebackground="#255a91",
+                      activeforeground=ACTION_INK, relief="flat", bd=0,
+                      pady=11, font=("TkDefaultFont", 10, "bold"),
+                      cursor="hand2").pack(fill="x", pady=3)
 
     def _build_results(self, parent) -> None:
-        frame = ttk.LabelFrame(parent, text="Resultados", padding=5)
+        frame = ttk.LabelFrame(parent, text="Resultados", padding=8,
+                               style="Card.TLabelframe")
         frame.pack(fill="both", expand=True)
 
         self.table = ttk.Treeview(frame, columns=TEXT["columns"],
@@ -272,7 +333,7 @@ class App(tk.Tk):
         self.table.configure(yscrollcommand=scrollbar.set)
         self.table.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        self.table.tag_configure("warn", background="#fff4e5")
+        self.table.tag_configure("warn", background=WARN_ROW)
 
     # --------------------------------------------------------------- state
 
@@ -280,10 +341,11 @@ class App(tk.Tk):
         button = buttons[name]
         if name in selection:
             selection.discard(name)
-            button.configure(bg="#f5f5f5", relief="raised")
+            button.configure(bg=EMPTY, fg=INK, font=("TkDefaultFont", 9))
         else:
             selection.add(name)
-            button.configure(bg="#7cb342", relief="sunken")
+            button.configure(bg=CHOSEN, fg=CHOSEN_INK,
+                             font=("TkDefaultFont", 9, "bold"))
         self._refresh_state()
 
     def _select_all(self, selection, buttons) -> None:
@@ -305,10 +367,10 @@ class App(tk.Tk):
         if self.blank:
             self.blank_label.configure(
                 text=TEXT["blank_done"].format(wells=", ".join(sorted(self.blank))),
-                foreground="#1b5e20",
+                style="Good.TLabel",
             )
         else:
-            self.blank_label.configure(text=TEXT["blank_pending"], foreground="#b00020")
+            self.blank_label.configure(text=TEXT["blank_pending"], style="Bad.TLabel")
 
         self.batch_label.configure(
             text=TEXT["batch_state"].format(reads=self.read_number,

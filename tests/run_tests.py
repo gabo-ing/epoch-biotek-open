@@ -70,11 +70,12 @@ def main() -> int:
     import test_xwd2png
     import test_usbpcap
     import test_config
+    import test_gui_module
 
     passed, failures = 0, []
     classes = [
         obj
-        for module in (test_quant, test_xlsx, test_take3, test_reader, test_xwd2png, test_usbpcap, test_config)
+        for module in (test_quant, test_xlsx, test_take3, test_reader, test_xwd2png, test_usbpcap, test_config, test_gui_module)
         for name, obj in vars(module).items()
         if name.startswith("Test") and isinstance(obj, type)
     ]

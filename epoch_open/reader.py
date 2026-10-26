@@ -101,7 +101,11 @@ class MockReader(ReaderBackend):
         wavelengths = wavelengths or [260, 280, REFERENCE_NM]
         readings = {}
         for well in wells:
-            background = 0.040 + self._random.gauss(0, 0.002)
+            # Real blanks on this instrument scatter by about 3% at 260 nm.
+            # The simulator used to use 0.002, which put a two-well blank over
+            # the 5% disagreement threshold and popped a warning dialog at
+            # anyone trying the program without hardware.
+            background = 0.040 + self._random.gauss(0, 0.0006)
             signal = 0.0 if self.simulating_blank else self._random.uniform(0.005, 0.25)
             values = {REFERENCE_NM: round(background, 4)}
             for wavelength in wavelengths:
