@@ -6,8 +6,5 @@ dist/
 *.spec
 *.xlsx
 
-# Excluded by default - your call whether to publish these:
-#   screenshots/ holds photos of your paperwork and Gen5 exports with real
-#   sample names; captures/ holds USB traces (useful to others, ~6 MB).
+# Photos of lab paperwork and the bench; not published.
 screenshots/
-captures/
