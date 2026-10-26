@@ -1,0 +1,257 @@
+<title>Epoch Sin Licencia</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a single reading column of lab-report width, with full-bleed bands for
+   the result tables and the instrument panel. Palette from the instrument itself:
+   housing graphite, data-sheet paper, the UV violet of the 260 nm line, and the
+   green the software uses for "measured". */
+:root {
+  --paper:      #f7f5f1;
+  --panel:      #ffffff;
+  --ink:        #1c1f26;
+  --ink-soft:   #5a6472;
+  --rule:       #ded8cd;
+  --uv:         #5b3fa8;
+  --measured:   #2f6b3a;
+  --alert:      #a4322c;
+  --band:       #22262f;
+  --band-ink:   #e8e6e1;
+
+  --display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+  --data:    "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:    #15181e;
+    --panel:    #1d212a;
+    --ink:      #e6e4e0;
+    --ink-soft: #9aa3b2;
+    --rule:     #343a45;
+    --uv:       #b49ef0;
+    --measured: #7cc48c;
+    --alert:    #e8897f;
+    --band:     #0f1216;
+    --band-ink: #e6e4e0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:    #15181e;
+  --panel:    #1d212a;
+  --ink:      #e6e4e0;
+  --ink-soft: #9aa3b2;
+  --rule:     #343a45;
+  --uv:       #b49ef0;
+  --measured: #7cc48c;
+  --alert:    #e8897f;
+  --band:     #0f1216;
+  --band-ink: #e6e4e0;
+  color-scheme: dark;
+}
+
+body { background: var(--paper); color: var(--ink); font-family: var(--body); line-height: 1.6; }
+.wrap {
+  max-width: 54rem; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+}
+h1, h2, h3, .eyebrow, .stat-n, th, .btn { font-family: var(--display); }
+h1 { font-size: clamp(2rem, 6vw, 3.1rem); line-height: 1.08; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; margin: 0 0 .6rem; }
+h2 { font-size: clamp(1.25rem, 3vw, 1.6rem); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; margin: 0 0 .2rem; }
+h3 { font-size: 1rem; font-weight: 600; margin: 0 0 .35rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--uv); }
+.eyebrow { font-size: .72rem; text-transform: uppercase; letter-spacing: .14em; color: var(--ink-soft); font-weight: 600; }
+
+header.hero { padding-block: clamp(2.5rem, 7vw, 4.5rem) clamp(1.5rem, 4vw, 2.5rem); border-bottom: 1px solid var(--rule); }
+.lede { font-size: clamp(1.05rem, 2.4vw, 1.25rem); color: var(--ink-soft); max-width: 40rem; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin-top: 1.6rem; font-family: var(--data); font-size: .78rem; color: var(--ink-soft); }
+
+section { padding-block: clamp(2rem, 5vw, 3rem); border-bottom: 1px solid var(--rule); }
+section:last-of-type { border-bottom: 0; }
+.section-head { margin-bottom: 1.4rem; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 1.6rem 0 0; }
+.stat { background: var(--panel); padding: 1.1rem 1.2rem; min-width: 0; }
+.stat-n { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--uv); }
+.stat-l { font-size: .8rem; color: var(--ink-soft); margin-top: .15rem; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-family: var(--data); font-size: .84rem; font-variant-numeric: tabular-nums; }
+th, td { padding: .55rem .8rem; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); font-weight: 600; background: var(--paper); }
+th:first-child, td:first-child { text-align: left; }
+tbody tr:last-child td { border-bottom: 0; }
+td.good { color: var(--measured); }
+td.bad { color: var(--alert); }
+caption { caption-side: bottom; text-align: left; font-family: var(--body); font-size: .84rem; color: var(--ink-soft); padding: .7rem .8rem 0; }
+
+.band { background: var(--band); color: var(--band-ink); }
+.band .wrap { padding-block: clamp(2rem, 5vw, 3rem); }
+.band h2, .band h3 { color: var(--band-ink); }
+.band p { color: #b9bfca; }
+.band .eyebrow { color: #8d96a5; }
+
+figure { margin: 0; }
+figure img { display: block; width: 100%; border: 1px solid var(--rule); background: var(--panel); }
+figcaption { font-size: .84rem; color: var(--ink-soft); margin-top: .6rem; }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1.6rem; }
+.cols > * { min-width: 0; }
+
+.callout { border-left: 3px solid var(--uv); padding: .2rem 0 .2rem 1.1rem; margin: 1.4rem 0; }
+.callout p:last-child { margin-bottom: 0; }
+
+code { font-family: var(--data); font-size: .88em; background: color-mix(in srgb, var(--uv) 10%, transparent); padding: .1em .35em; border-radius: 2px; }
+pre { font-family: var(--data); font-size: .8rem; background: var(--panel); border: 1px solid var(--rule); padding: .9rem 1rem; overflow-x: auto; margin: 0 0 1rem; line-height: 1.5; }
+
+ul.plain { list-style: none; padding: 0; margin: 0 0 1rem; }
+ul.plain li { padding-left: 1.1rem; position: relative; margin-bottom: .5rem; }
+ul.plain li::before { content: ""; position: absolute; left: 0; top: .62em; width: .4rem; height: 1px; background: var(--ink-soft); }
+
+footer { padding-block: 2.5rem 3.5rem; font-size: .85rem; color: var(--ink-soft); }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Laboratorio &middot; 26 octubre 2026</p>
+    <h1>Un lector de placas que volvió a funcionar</h1>
+    <p class="lede">El Epoch quedó inutilizable porque el contador de licencias del software llegó a cinco. En un día pasó a leer placas con software libre, que coincide con el del fabricante dentro del 0,5 %.</p>
+    <div class="meta">
+      <span>BioTek Epoch &middot; P/N 7200201</span>
+      <span>Firmware 1.12</span>
+      <span>Placa Take3 243819</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">El problema</p>
+      <h2>El instrumento estaba bien; el contador no</h2>
+    </div>
+    <p>El espectrofotómetro funcionaba perfectamente. Lo que se agotó fue el número de activaciones de la licencia del software que lo controla. Sin ese programa, un equipo que mide ADN y ARN todos los días no sirve para nada.</p>
+    <p>La vía legítima es la interoperabilidad: escribir software nuevo que hable con un instrumento que el laboratorio ya posee. Nada de lo que sigue tocó, modificó ni inspeccionó el programa del fabricante.</p>
+    <div class="stats">
+      <div class="stat"><div class="stat-n">0,5 %</div><div class="stat-l">diferencia con el software del fabricante</div></div>
+      <div class="stat"><div class="stat-n">2,0×</div><div class="stat-l">más rápido por lectura</div></div>
+      <div class="stat"><div class="stat-n">176</div><div class="stat-l">pruebas automáticas</div></div>
+      <div class="stat"><div class="stat-n">0</div><div class="stat-l">costo de licencia</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Cómo se resolvió</p>
+      <h2>El instrumento habla por un puerto serie corriente</h2>
+    </div>
+    <div class="cols">
+      <div>
+        <h3>1. El transporte</h3>
+        <p>Los discos originales traían el driver FTDI estándar, no uno propietario. El lector aparece como un puerto serie común y se abre con <code>pyserial</code>. En Linux no necesita ningún driver.</p>
+      </div>
+      <div>
+        <h3>2. El protocolo</h3>
+        <p>Comandos de un solo carácter, respuestas entre <code>ACK</code> y <code>ETX</code>. El lector contestó su número de serie al primer intento, a 9600 baudios, 8-N-2.</p>
+      </div>
+      <div>
+        <h3>3. Las lecturas</h3>
+        <p>Capturas USB del software del fabricante conduciendo el equipo, decodificadas con un lector de capturas escrito para el caso.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <p><strong>El hallazgo que desbloqueó todo.</strong> El firmware 1.12 responde <code>0</code> a la consulta de capacidad 2064. Si se le envía igual el campo de óptica extendida, el lector rechaza la lectura con el estado <code>2D06</code>. Quitando ese campo, las lecturas funcionan. Es el mismo síntoma que otro usuario reportó sin respuesta en el foro de PyLabRobot.</p>
+    </div>
+  </div>
+</section>
+
+<div class="band">
+  <div class="wrap">
+    <p class="eyebrow">La prueba</p>
+    <h2 style="margin-bottom:1rem">Las mismas gotas, los dos programas</h2>
+    <p style="max-width:40rem">Escalera de ADN GeneRuler 100 pb. Se leyó con el software del fabricante y con el nuevo sobre las mismas gotas, con el mismo blanco y el mismo pozo de referencia, con 3 min 31 s de diferencia.</p>
+    <div class="tablewrap" style="margin-top:1.4rem">
+      <table>
+        <caption>Concentraciones en ng/µL y razón 260/280. A2 y B2 sin diluir, C2 y D2 diluidos 1:10.</caption>
+        <thead>
+          <tr><th>Pozo</th><th>Fabricante</th><th>Nuevo</th><th>Dif.</th><th>260/280 fab.</th><th>260/280 nuevo</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>A2</td><td>422,93</td><td>424,68</td><td class="good">+0,42 %</td><td>1,853</td><td>1,856</td></tr>
+          <tr><td>B2</td><td>428,40</td><td>430,97</td><td class="good">+0,60 %</td><td>1,856</td><td>1,854</td></tr>
+          <tr><td>C2</td><td>22,52</td><td>23,11</td><td class="good">+2,64 %</td><td>1,831</td><td>1,835</td></tr>
+          <tr><td>D2</td><td>47,61</td><td>47,31</td><td class="good">&minus;0,63 %</td><td>1,810</td><td>1,812</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1.3rem">C2 leyó la mitad de lo que debía en los dos programas. Era una gota mal cargada, y los dos sistemas la detectaron por separado con el mismo veredicto. Eso es más difícil de falsear que una coincidencia en una gota buena.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">El programa</p>
+      <h2>Pensado para quien lo usa todos los días</h2>
+    </div>
+    <figure>
+      <img src="gui.png" alt="Ventana del programa: cuadrícula de la placa Take3 para el blanco y para las muestras, y tabla de resultados con concentraciones y avisos.">
+      <figcaption>Dos cuadrículas, una para el blanco y otra para las muestras, siguiendo la disposición del programa original. Doble clic en un pozo para nombrar la muestra. El lote se acumula entre cargas de placa y se guarda en un solo Excel.</figcaption>
+    </figure>
+    <div class="cols" style="margin-top:2rem">
+      <div>
+        <h3>Avisos en castellano</h3>
+        <p>Cuando algo sale mal, la fila dice qué pasó y qué hacer, al lado de la muestra afectada. El programa original marca la celda en amarillo y deja una leyenda al pie.</p>
+      </div>
+      <div>
+        <h3>Revisa el blanco antes</h3>
+        <p>Si los pozos del blanco no coinciden entre sí, avisa antes de gastar una sola muestra. La primera vez que se usó con datos reales encontró un pozo malo.</p>
+      </div>
+      <div>
+        <h3>Sin configurar nada</h3>
+        <p>Encuentra el lector por su número de serie. No hay puerto COM que elegir. Si no hay instrumento, abre en modo simulación con un aviso rojo imposible de ignorar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Lo que no está probado</p>
+      <h2>Tres cosas quedaron abiertas</h2>
+    </div>
+    <ul class="plain">
+      <li><strong>Deriva del blanco en sesiones largas.</strong> El blanco se lee una vez y se usa durante horas. Si la lámpara deriva, los últimos lotes heredan el error y los números siguen pareciendo normales. Sin medir.</li>
+      <li><strong>Exactitud absoluta.</strong> Los dos programas coinciden entre sí, pero ambos leen un 12 % por debajo del valor nominal de la escalera. Sin material certificado no hay forma de saber quién tiene razón.</li>
+      <li><strong>La técnica todavía no lo ha usado.</strong> Toda la interfaz es una inferencia a partir de las pantallas del programa original. Su primera sesión encontrará cosas que nadie previó.</li>
+    </ul>
+    <p>Hay además una nota de servicio de 2011 en la que este lector falló la prueba de exactitud de longitud de onda (leyó 500 nm contra una referencia de 505). Podría sesgar ligeramente la razón 260/280. Está documentado por si aparece.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Dónde está</p>
+      <h2>Código abierto, con las capturas</h2>
+    </div>
+    <p>El repositorio incluye el programa, las 176 pruebas automáticas, la documentación del protocolo y de cómo se dedujo el cálculo de concentraciones, y las capturas USB del firmware 1.12. Licencia MIT.</p>
+    <pre>github.com/gabo-ing/epoch-biotek-open</pre>
+    <p>Las capturas se publican porque el trabajo previo de PyLabRobot da ese firmware como no verificado, y los datos de prueba de su parche son sintéticos. Estos son reales. Para otro laboratorio con otro Epoch, basta un archivo de configuración con los espesores de gota de su propia placa.</p>
+    <p style="color:var(--ink-soft)">Crédito a PyLabRobot, de donde salió el vocabulario de comandos y el marco de los mensajes. Sin ese trabajo esto habría tomado semanas en vez de un día.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Epoch 254717 &middot; firmware 1.12 &middot; placa Take3 243819 &middot; validado el 26 de octubre de 2026 contra Gen5 1.11.5.</p>
+  </div>
+</footer>

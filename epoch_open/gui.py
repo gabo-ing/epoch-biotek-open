@@ -40,8 +40,9 @@ TEXT = {
     # "Camino optico" is the correct term and it is what the data sheet says, but
     # it told the reader nothing. The physical quantity is how thick the drop is
     # where the light crosses it, so the label says that.
-    "path_sheet": "Espesor de gota: medido pozo a pozo (hoja de la placa {serial})",
-    "path_nominal": "Espesor de gota: 0,5 mm nominal (sin hoja de la placa)",
+    # Only the fallback is shown on screen; both go into the Excel.
+    "path_nominal": ("Sin hoja de calibracion de esta placa: se usa 0,5 mm "
+                     "nominal, las concentraciones pueden desviarse ~2%."),
     "blank_pending": "Falta leer el blanco",
     "blank_done": "Blanco leido: {wells}",
     "batch_empty": "Lote vacio",
@@ -249,11 +250,13 @@ class App(tk.Tk):
         self.wavelength_label = ttk.Label(frame, text="", style="Muted.TLabel")
         self.wavelength_label.pack(anchor="w")
 
-        basis = (TEXT["path_sheet"].format(serial=PLATE_SERIAL) if self.pathlengths
-                 else TEXT["path_nominal"])
-        ttk.Label(frame, text=basis,
-                  style="Good.TLabel" if self.pathlengths else "Muted.TLabel"
-                  ).pack(anchor="w")
+        # Shown only when it is not the normal case. With the plate's own sheet
+        # loaded there is nothing for the user to do about it, and it goes in the
+        # Excel either way for traceability. Without the sheet the results are up
+        # to 2.4% off, which she should see.
+        if not self.pathlengths:
+            ttk.Label(frame, text=TEXT["path_nominal"],
+                      style="Bad.TLabel", wraplength=330).pack(anchor="w")
 
     def _build_grid(self, parent, title, selection, buttons, nameable) -> None:
         frame = ttk.LabelFrame(parent, text=title, padding=8,
