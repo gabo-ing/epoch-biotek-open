@@ -23,7 +23,10 @@ from epoch_open.quant import (                                  # noqa: E402
 from epoch_open.reader import EpochReader, ReaderError          # noqa: E402
 from epoch_open.xlsx import export_results                      # noqa: E402
 
-PLATE_SERIAL = "243819"
+from epoch_open import config  # noqa: E402
+
+CONFIG = config.load()
+PLATE_SERIAL = CONFIG.plate_serial
 
 
 def parse_wells(text: str) -> list[str]:
@@ -65,7 +68,7 @@ def main() -> int:
     pathlengths = None if args.nominal else take3.pathlengths_for_plate(args.plate)
     basis = "nominal 0.5 mm" if pathlengths is None else f"sheet for plate {args.plate}"
 
-    reader = EpochReader(port=args.port, expected_serial=None)
+    reader = EpochReader(port=args.port, expected_serial=CONFIG.reader_serial)
     try:
         info = reader.connect()
         print(f"Connected: {info.model} serial {info.serial}, firmware "

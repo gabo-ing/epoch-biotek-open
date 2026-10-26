@@ -73,6 +73,13 @@ reduces to `ng/uL = A260 x 1000`.
 The derivation, and two assumptions this project got wrong before the real exports
 arrived, are in `docs/QUANTIFICATION.md`.
 
+## Using it with a different instrument
+
+Nothing is compiled in any more: copy `epoch_open.example.json` to
+`epoch_open.json` beside the program and edit it. See `docs/FOR_OTHER_LABS.md`.
+The one setting that genuinely matters is the pathlength table from your own
+Take3's data sheet.
+
 ## Running it today
 
 The whole program works now against a built-in simulator, so the screen and the

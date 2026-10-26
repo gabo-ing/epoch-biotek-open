@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import take3
+from . import config, take3
 from .quant import QuantError, blank_for, check_blanks, quantify, wavelengths_for
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import export_results
@@ -100,7 +100,7 @@ class App(tk.Tk):
         self.sample_buttons: dict[str, tk.Button] = {}
 
         self.sample_names: dict[str, str] = {}
-        self.pathlengths = take3.pathlengths_for_plate(PLATE_SERIAL)
+        self.pathlengths = CONFIG.pathlengths
 
         self.blank: dict | None = None
         self.results: list = []          # (read_number, QuantResult)

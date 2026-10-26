@@ -1,0 +1,18 @@
+{
+  "_comment": "Rename to epoch_open.json and put it beside EpochTake3.exe. Every field is optional.",
+
+  "reader_serial": null,
+
+  "plate_serial": "YOUR-TAKE3-SERIAL",
+
+  "pathlengths_mm": {
+    "A2": 0.5000, "A3": 0.5000,
+    "B2": 0.5000, "B3": 0.5000,
+    "C2": 0.5000, "C3": 0.5000,
+    "D2": 0.5000, "D3": 0.5000,
+    "E2": 0.5000, "E3": 0.5000,
+    "F2": 0.5000, "F3": 0.5000,
+    "G2": 0.5000, "G3": 0.5000,
+    "H2": 0.5000, "H3": 0.5000
+  }
+}
