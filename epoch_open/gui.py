@@ -37,8 +37,11 @@ TEXT = {
     "clear_samples": "Limpiar",
     "all_samples": "Todos",
     "wavelengths": "Longitudes de onda: {list}",
-    "path_sheet": "Caminos opticos: hoja de la placa",
-    "path_nominal": "Caminos opticos: nominal 0,5 mm",
+    # "Camino optico" is the correct term and it is what the data sheet says, but
+    # it told the reader nothing. The physical quantity is how thick the drop is
+    # where the light crosses it, so the label says that.
+    "path_sheet": "Espesor de gota: medido pozo a pozo (hoja de la placa {serial})",
+    "path_nominal": "Espesor de gota: 0,5 mm nominal (sin hoja de la placa)",
     "blank_pending": "Falta leer el blanco",
     "blank_done": "Blanco leido: {wells}",
     "batch_empty": "Lote vacio",
@@ -246,8 +249,11 @@ class App(tk.Tk):
         self.wavelength_label = ttk.Label(frame, text="", style="Muted.TLabel")
         self.wavelength_label.pack(anchor="w")
 
-        basis = TEXT["path_sheet"] if self.pathlengths else TEXT["path_nominal"]
-        ttk.Label(frame, text=basis, style="Good.TLabel").pack(anchor="w")
+        basis = (TEXT["path_sheet"].format(serial=PLATE_SERIAL) if self.pathlengths
+                 else TEXT["path_nominal"])
+        ttk.Label(frame, text=basis,
+                  style="Good.TLabel" if self.pathlengths else "Muted.TLabel"
+                  ).pack(anchor="w")
 
     def _build_grid(self, parent, title, selection, buttons, nameable) -> None:
         frame = ttk.LabelFrame(parent, text=title, padding=8,
@@ -501,8 +507,8 @@ class App(tk.Tk):
 
         metadata = {
             "Placa Take3": PLATE_SERIAL,
-            "Caminos opticos": ("hoja de la placa" if self.pathlengths
-                                else "nominal 0,5 mm"),
+            "Espesor de gota": ("medido pozo a pozo, hoja de la placa"
+                                if self.pathlengths else "0,5 mm nominal"),
             "Lector": self.info.model,
             "Numero de serie": self.info.serial,
             "Tipo de muestra": self.sample_type.get(),
