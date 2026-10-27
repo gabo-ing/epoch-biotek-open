@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import config, take3
+from . import __version__, config, take3
 from .quant import QuantError, blank_for, check_blanks, quantify, wavelengths_for
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import export_results
@@ -117,7 +117,7 @@ PLATE_READER_SERIAL = CONFIG.reader_serial
 class App(tk.Tk):
     def __init__(self, backend=None):
         super().__init__()
-        self.title(TEXT["title"])
+        self.title(f'{TEXT["title"]}  {__version__}')
         self.minsize(1120, 720)
 
         self.backend = backend or MockReader()
@@ -563,11 +563,13 @@ class App(tk.Tk):
             return
 
         metadata = {
+            "Programa": f"epoch-open {__version__}",
             "Placa Take3": self.plate_serial,
             "Espesor de gota": ("medido pozo a pozo, hoja de la placa"
                                 if self.pathlengths else "0,5 mm nominal"),
             "Lector": self.info.model,
             "Numero de serie": self.info.serial,
+            "Firmware": self.info.firmware,
             "Tipo de muestra": self.sample_type.get(),
         }
         if self.simulated:

@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from epoch_open import take3                                    # noqa: E402
+from epoch_open import __version__, take3                                    # noqa: E402
 from epoch_open.quant import (                                  # noqa: E402
     blank_for, check_blanks, quantify, wavelengths_for,
 )
@@ -119,7 +119,8 @@ def main() -> int:
     if args.xlsx:
         export_results(
             args.xlsx, results,
-            metadata={"Placa Take3": args.plate, "Caminos opticos": basis,
+            metadata={"Programa": f"epoch-open {__version__}",
+                      "Placa Take3": args.plate, "Espesor de gota": basis,
                       "Tipo de muestra": args.type},
         )
         print(f"\nWrote {args.xlsx}")

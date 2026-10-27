@@ -20,13 +20,22 @@ python -m pip install pyserial pyinstaller || goto :fail
 
 echo.
 echo === Building EpochTake3.exe ===
+REM Excluding standard-library packages the program never imports keeps the
+REM executable small. If the build ever fails, delete the --exclude-module lines
+REM first: they are an optimisation, not a requirement.
 python -m PyInstaller --onefile --windowed --name EpochTake3 ^
     --hidden-import serial --hidden-import serial.tools.list_ports ^
+    --exclude-module unittest --exclude-module pydoc --exclude-module doctest ^
+    --exclude-module pdb --exclude-module sqlite3 --exclude-module lib2to3 ^
+    --exclude-module test --exclude-module distutils ^
     run_gui.py || goto :fail
 
 echo.
 echo === Done ===
 echo The program is at:  dist\EpochTake3.exe
+echo.
+echo Copy epoch_open.example.json next to it as epoch_open.json if you want to
+echo preset the plate; otherwise use "Cambiar placa..." inside the program.
 echo.
 echo Before giving it to anyone, run it once with the reader unplugged: it must
 echo open and show the red SIMULATION banner. Then plug the reader in and check

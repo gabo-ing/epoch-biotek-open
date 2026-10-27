@@ -276,3 +276,29 @@ class TestExcelCompatibility:
                 for rel in root:
                     target = rel.get("Target")
                     assert (base + target) in names, f"{rels_part} -> {target}"
+
+
+class TestProvenance:
+    """A result file must say which build produced it. Without this, a number
+    questioned years later cannot be traced to the software that made it."""
+
+    def test_the_package_has_a_version(self):
+        from epoch_open import __version__
+
+        assert __version__
+        assert __version__[0].isdigit()
+
+    def test_metadata_reaches_the_summary_sheet(self):
+        from epoch_open import __version__
+
+        blank = RawWell("A3", {260: 0.053, 280: 0.050, 320: 0.045})
+        results = [(1, quantify(RawWell("A2", {260: 0.497, 280: 0.287, 320: 0.042}),
+                                blank))]
+        path = export_results(
+            tmp_path_for("prov.xlsx"), results,
+            metadata={"Programa": f"epoch-open {__version__}", "Firmware": "1.12"},
+        )
+        with zipfile.ZipFile(path) as z:
+            sheet = z.read("xl/worksheets/sheet1.xml").decode()
+        assert __version__ in sheet
+        assert "1.12" in sheet
