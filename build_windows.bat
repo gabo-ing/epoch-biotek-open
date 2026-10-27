@@ -1,7 +1,8 @@
 @echo off
 REM Build EpochTake3.exe on Windows. Run this from the project folder.
 REM
-REM Needs Python 3.11+ from python.org, with "Add python.exe to PATH" ticked.
+REM Needs Python 3.10 or newer from python.org, with "Add python.exe to PATH"
+REM ticked. Newer is fine; 3.13 is what this was developed against.
 REM Do NOT use the Microsoft Store build: it has shipped without tkinter, and
 REM the interface will not start.
 

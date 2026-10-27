@@ -80,12 +80,58 @@ Nothing is compiled in: copy `epoch_open.example.json` to
 The one setting that genuinely matters is the pathlength table from your own
 Take3's data sheet.
 
+## What it needs
+
+| | |
+|---|---|
+| Python | 3.10 or newer (it uses `X \| None` annotations). Run here on 3.13 |
+| `pyserial` | the only third-party library, and only to talk to the instrument |
+| tkinter | for the window. Bundled with Python on Windows and macOS; a separate package on Linux |
+| `pyinstaller` | only to build the Windows `.exe` |
+
+Everything else — the Excel writer, the config file, the test runner — is written
+against the standard library on purpose, so there is as little as possible to
+break or to reinstall in five years.
+
+Reading a plate also needs the **FTDI VCP driver** on Windows. Linux needs nothing:
+`ftdi_sio` is in the kernel.
+
+## Installing
+
+### Windows (what the lab actually uses)
+
+1. **Python** from <https://www.python.org/downloads/>, ticking
+   **"Add python.exe to PATH"** during setup. Do not use the Microsoft Store
+   build: it has shipped without tkinter, and the window will not open.
+2. **FTDI VCP driver** from <https://ftdichip.com/drivers/vcp-drivers/>, installed
+   **before** the reader is plugged in. The disks that came with the Epoch have
+   `USB driver/CDM20600.exe`, which works but dates from 2009.
+3. **The source**: on GitHub use *Code -> Download ZIP*, and unpack it somewhere
+   stable such as `C:\EpochTake3\` — not Downloads, where it will be tidied away.
+4. **Build**: double-click `build_windows.bat`. It checks Python and tkinter,
+   installs `pyserial` and `pyinstaller`, and leaves `dist\EpochTake3.exe`.
+
+The exe is self-contained: the technician needs no Python and no console. Put it
+somewhere stable and make a Desktop shortcut. `docs/WINDOWS.md` has the checks to
+run before handing it to anyone.
+
+### Linux
+
+    sudo apt install python3-tk python3-serial      # Debian/Ubuntu
+    sudo usermod -aG dialout $USER                  # then log out and back in
+
+The `dialout` group is what grants access to the serial port. Without it the
+program will find the reader and still be unable to open it.
+
+### macOS
+
+    pip3 install pyserial
+
+tkinter comes with the python.org build. Untested: no one has run this on a Mac.
+
 ## Running it today
 
     python3 run_gui.py
-
-Needs tkinter (bundled with Python on Windows; on Debian/Ubuntu
-`apt install python3-tk`).
 
 **Without an instrument it will not produce numbers.** The window opens, the plate
 can be laid out and a saved file can be reopened, but the read buttons are greyed
