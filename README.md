@@ -91,6 +91,13 @@ It opens with a red banner saying the numbers are simulated, and any file it sav
 carries the same warning inside. Needs tkinter (bundled with Python on Windows; on
 Debian/Ubuntu `apt install python3-tk`).
 
+The order you switch things on does not matter. If the reader is not there at
+startup the program keeps looking for it every few seconds and turns the banner
+green by itself once it answers, so there is no need to restart it. Simulated
+readings are never folded into a real batch: if any are already on screen when the
+instrument appears, it asks first and discards them. If the reader stops answering
+mid-session the banner says so instead of quietly reverting to simulated numbers.
+
 ## Running the tests
 
     python3 tests/run_tests.py     # no dependencies

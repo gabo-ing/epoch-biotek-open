@@ -11,6 +11,7 @@ translating means editing one block.
 
 import os
 import sys
+import threading
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,11 @@ TEXT = {
     "title": "Cuantificacion Take3 - Epoch",
     "simulated": "MODO SIMULACION - no hay lector conectado. Los numeros NO son medidas reales.",
     "connected": "Lector {model}, serie {serial}, firmware {firmware}, en {port}",
+    "searching": "MODO SIMULACION - buscando el lector... Los numeros NO son medidas reales.",
+    "lost": "EL LECTOR NO RESPONDE - comprueba que sigue encendido. Reintentando...",
+    "found_now": "Lector encontrado y conectado. Ya puedes leer de verdad.",
+    "found_busy_title": "Lector encontrado",
+    "found_busy": "Se ha encontrado el lector encendido.\n\nEl lote actual tiene datos SIMULADOS, que no se pueden mezclar con medidas reales.\n\n¿Descartar el lote simulado y usar el lector?",
     "blank_plate": "Blanco",
     "sample_plate": "Muestras",
     "plate": "Placa Take3  {serial}",
@@ -115,13 +121,26 @@ PLATE_READER_SERIAL = CONFIG.reader_serial
 
 
 class App(tk.Tk):
-    def __init__(self, backend=None):
+    PROBE_MS = 3000          # how often to look for the reader
+
+    def __init__(self, backend=None, watch: bool = False):
         super().__init__()
         self.title(f'{TEXT["title"]}  {__version__}')
         self.minsize(1120, 720)
 
         self.backend = backend or MockReader()
         self.simulated = isinstance(self.backend, MockReader)
+
+        # The technician will often start the program before switching the Epoch
+        # on. Rather than make her restart it, keep looking for the instrument in
+        # the background and switch over when it answers.
+        self.watching = watch
+        self.lost = False
+        self._probe_thread: threading.Thread | None = None
+        self._probe_found = None       # set by the probe thread, read by the GUI
+        self._probe_declined = False   # she said no once; do not nag
+        # One lock over the serial port: a probe must never run mid-read.
+        self._port_lock = threading.Lock()
         # An EpochReader handed to us is already connected; re-connecting would
         # renegotiate the baud rate for nothing.
         self.info = (
@@ -156,6 +175,9 @@ class App(tk.Tk):
         # data in it. Simulator only -- it will not move real hardware unasked.
         if os.environ.get("EPOCH_GUI_DEMO") == "1" and self.simulated:
             self.after(300, self._demo_run)
+
+        if self.watching:
+            self.after(self.PROBE_MS, self._probe_tick)
 
     # ---------------------------------------------------------------- styling
 
@@ -234,16 +256,25 @@ class App(tk.Tk):
         self.status.pack(fill="x", side="bottom")
 
     def _build_banner(self) -> None:
-        if self.simulated:
-            text, bg = TEXT["simulated"], BAD
+        self.banner = tk.Label(self, bg=BAD, fg="white", pady=9,
+                               font=("TkDefaultFont", 11, "bold"))
+        self.banner.pack(fill="x")
+        self._refresh_banner()
+
+    def _refresh_banner(self) -> None:
+        """The banner is the one place that says whether the numbers are real."""
+        if self.lost:
+            text, bg = TEXT["lost"], BAD
+        elif self.simulated:
+            text = TEXT["searching"] if self.watching else TEXT["simulated"]
+            bg = BAD
         else:
             text = TEXT["connected"].format(
                 model=self.info.model, serial=self.info.serial,
                 firmware=self.info.firmware, port=self.info.port,
             )
             bg = GOOD
-        tk.Label(self, text=text, bg=bg, fg="white", pady=9,
-                 font=("TkDefaultFont", 11, "bold")).pack(fill="x")
+        self.banner.configure(text=text, bg=bg)
 
     def _build_header(self, parent) -> None:
         frame = ttk.Frame(parent)
@@ -463,15 +494,100 @@ class App(tk.Tk):
             text=self.sample_names.get(name, name)[:7]
         )
 
+    # --------------------------------------------------- finding the reader
+
+    def _probe_tick(self) -> None:
+        """Look for the instrument every few seconds, without freezing the window.
+
+        Connecting walks several baud rates and can take seconds, so it runs in a
+        thread; only this method, on the GUI thread, ever touches a widget.
+        """
+        if not self.watching:
+            return
+
+        found, self._probe_found = self._probe_found, None
+        if found is not None:
+            self._adopt(found)
+        elif self._needs_reader() and self._probe_thread is None:
+            self._probe_thread = threading.Thread(target=self._probe, daemon=True)
+            self._probe_thread.start()
+
+        self.after(self.PROBE_MS, self._probe_tick)
+
+    def _needs_reader(self) -> bool:
+        return self.simulated or self.lost
+
+    def _probe(self) -> None:
+        """Background thread: try to open the reader, give up quietly if absent."""
+        if not self._port_lock.acquire(blocking=False):
+            self._probe_thread = None
+            return
+        try:
+            reader = EpochReader(expected_serial=PLATE_READER_SERIAL)
+            try:
+                reader.connect()
+            except (ReaderError, NotImplementedError, OSError):
+                return          # not switched on yet; try again next tick
+            self._probe_found = reader
+        finally:
+            self._port_lock.release()
+            self._probe_thread = None
+
+    def _adopt(self, reader) -> None:
+        """Switch to the real instrument, but never mix simulated data into a batch."""
+        if not self._needs_reader():
+            reader.close()
+            return
+
+        simulated_data = self.simulated and (self.blank is not None or self.results)
+        if simulated_data:
+            if self._probe_declined:
+                reader.close()
+                return
+            if not messagebox.askyesno(TEXT["found_busy_title"], TEXT["found_busy"]):
+                self._probe_declined = True
+                reader.close()
+                return
+            self.blank = None
+            self.results = []
+            self.read_number = 0
+            self.sample_names = {}
+            self._fill_table()
+
+        self.backend = reader
+        self.simulated = False
+        self.lost = False
+        self.info = ReaderInfo(
+            model="Epoch", serial=reader.expected_serial or "?",
+            firmware="1.12", port=reader.port or "?",
+        )
+        self._refresh_banner()
+        self._refresh_state()
+        self._say(TEXT["found_now"])
+
+    def _mark_lost(self) -> None:
+        """A read failed: say so plainly and start looking for the reader again."""
+        if self.simulated:
+            return
+        self.lost = True
+        try:
+            self.backend.close()
+        except Exception:
+            pass
+        self._refresh_banner()
+        if self.watching and self._probe_thread is None:
+            self.after(self.PROBE_MS, self._probe_tick)
+
     # -------------------------------------------------------------- actions
 
     def _read(self, wells: list[str], as_blank: bool):
         if isinstance(self.backend, MockReader):
             # Simulation only: tell the fake instrument what is on the plate.
             self.backend.simulating_blank = as_blank
-        return self.backend.read_wells(
-            wells, wavelengths_for(self.sample_type.get(), self.with_230.get())
-        )
+        with self._port_lock:
+            return self.backend.read_wells(
+                wells, wavelengths_for(self.sample_type.get(), self.with_230.get())
+            )
 
     def _read_blank(self) -> None:
         wells = sorted(self.blank_selected)
@@ -482,7 +598,8 @@ class App(tk.Tk):
         self._say(TEXT["reading"])
         try:
             self.blank = self._read(wells, as_blank=True)
-        except (ReaderError, NotImplementedError) as exc:
+        except (ReaderError, NotImplementedError, OSError) as exc:
+            self._mark_lost()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
             self._say(TEXT["instructions"])
             return
@@ -505,7 +622,8 @@ class App(tk.Tk):
         self._say(TEXT["reading"])
         try:
             raw = self._read(wells, as_blank=False)
-        except (ReaderError, NotImplementedError) as exc:
+        except (ReaderError, NotImplementedError, OSError) as exc:
+            self._mark_lost()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
             self._say(TEXT["instructions"])
             return
@@ -776,7 +894,7 @@ def connect_backend(force_simulator: bool = False):
 
 def main() -> int:
     force = "--sim" in sys.argv or os.environ.get("EPOCH_GUI_SIM") == "1"
-    App(connect_backend(force)).mainloop()
+    App(connect_backend(force), watch=not force).mainloop()
     return 0
 
 
