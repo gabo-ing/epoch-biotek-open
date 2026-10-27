@@ -88,12 +88,13 @@ class MockReader(ReaderBackend):
         self.simulating_blank = blank
 
     def connect(self) -> ReaderInfo:
-        return ReaderInfo(
+        self.info = ReaderInfo(
             model="Epoch (simulated)",
             serial="254717",
             firmware="unknown",
             port="none",
         )
+        return self.info
 
     def read_wells(
         self, wells: list[str], wavelengths: list[int] | None = None
@@ -149,6 +150,10 @@ class EpochReader(ReaderBackend):
         self.baudrate = None
         self.timeout = timeout
         self.expected_serial = expected_serial
+        # What the instrument said about itself when it answered. The screen and
+        # every exported file quote this, so it must come from the reader rather
+        # than from the config file.
+        self.info: ReaderInfo | None = None
         self._serial = None
         self._plate = None
         self._capabilities: dict[int, bytes] = {}
@@ -338,9 +343,10 @@ class EpochReader(ReaderBackend):
             )
 
         self.port = port
-        return ReaderInfo(
+        self.info = ReaderInfo(
             model="Epoch", serial=serial_number, firmware=firmware, port=port
         )
+        return self.info
 
     # ------------------------------------------------------------- reading
 

@@ -82,8 +82,10 @@ class TestNoReaderMeansNoNumbers:
             assert app._needs_reader() is True
 
             class FakeReader:
-                expected_serial = "254717"
+                expected_serial = None
                 port = "/dev/ttyUSB0"
+                info = gui.ReaderInfo(model="Epoch", serial="254717",
+                                      firmware="1.12", port="/dev/ttyUSB0")
 
                 def close(self):
                     pass

@@ -23,12 +23,19 @@ except ImportError:          # no tkinter on this machine
 
 
 class FakeReader:
-    """Stands in for a connected EpochReader without touching a serial port."""
+    """Stands in for a connected EpochReader without touching a serial port.
 
-    def __init__(self, serial="254717", port="/dev/ttyUSB0"):
-        self.expected_serial = serial
+    It carries an `info` the way a real one does after connect(): that is what
+    the instrument said about itself, and it is what the screen and the exports
+    must quote.
+    """
+
+    def __init__(self, serial="254717", port="/dev/ttyUSB0", firmware="1.12"):
+        self.expected_serial = None       # no config: accept whichever answers
         self.port = port
         self.closed = False
+        self.info = gui.ReaderInfo(model="Epoch", serial=serial,
+                                   firmware=firmware, port=port)
 
     def close(self):
         self.closed = True
@@ -57,6 +64,27 @@ class TestReaderAppears:
             assert app.lost is False
             assert app.info.serial == "254717"
             assert "Lector" in app.banner.cget("text")
+        finally:
+            app.destroy()
+
+    def test_the_serial_comes_from_the_instrument_not_the_config(self):
+        """A reader with no serial configured must still identify itself.
+
+        The screen used to rebuild this from the config file and a hard-coded
+        firmware string, so a laptop with no config file showed "serie ?" and
+        claimed firmware 1.12 whatever the instrument actually ran. Both go into
+        every exported file.
+        """
+        app = _app()
+        if app is None:
+            return
+        try:
+            app.watching = True
+            app._adopt(FakeReader(serial="999001", firmware="2.04"))
+            assert app.info.serial == "999001"
+            assert app.info.firmware == "2.04"
+            assert "999001" in app.banner.cget("text")
+            assert "2.04" in app.banner.cget("text")
         finally:
             app.destroy()
 

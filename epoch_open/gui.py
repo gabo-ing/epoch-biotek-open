@@ -334,9 +334,11 @@ class App(tk.Tk):
         elif self.simulated:
             self.info = self.backend.connect()
         else:
-            self.info = ReaderInfo(
-                model="Epoch", serial=self.backend.expected_serial or "?",
-                firmware="1.12", port=self.backend.port or "?",
+            # A connected EpochReader already asked the instrument who it is;
+            # re-connecting would renegotiate the baud rate for nothing.
+            self.info = self.backend.info or ReaderInfo(
+                model="Epoch", serial="?", firmware="?",
+                port=self.backend.port or "?",
             )
 
         self.blank_selected: set[str] = set()
@@ -940,9 +942,11 @@ class App(tk.Tk):
         self.simulated = False
         self.lost = False
         self.no_reader = False
-        self.info = ReaderInfo(
-            model="Epoch", serial=reader.expected_serial or "?",
-            firmware="1.12", port=reader.port or "?",
+        # What the instrument reported when it answered, not what the config
+        # file hoped for. This is quoted on screen and stamped into every export,
+        # so a guess here is a false provenance record.
+        self.info = reader.info or ReaderInfo(
+            model="Epoch", serial="?", firmware="?", port=reader.port or "?",
         )
         self._refresh_banner()
         self._refresh_state()
