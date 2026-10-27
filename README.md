@@ -144,9 +144,11 @@ No driver is needed: the FTDI driver has been part of macOS since 10.9, and the
 reader is found by its USB serial number rather than by any device path, so
 `/dev/cu.usbserial-*` works without changes.
 
-**Untested.** The program has been run on Linux and is used on Windows. Nothing
-in it is platform-specific — the one Windows-only call returns immediately
-elsewhere — but nobody has yet run it against an Epoch from a Mac.
+The interface has been run on macOS and draws correctly: sharp on a Retina
+screen, the layout tightening by itself for the shorter usable height
+(`docs/img/gui-macos.png`). What has **not** been tried is a Mac talking to an
+actual Epoch, and `build_macos.sh` has never been run, so the `.app` route is
+still unverified.
 
 ## Running it today
 
