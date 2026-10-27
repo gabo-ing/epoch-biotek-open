@@ -240,43 +240,51 @@ class RoundedButton(tk.Canvas):
 # One place for colour, so the screen stays coherent. Greens mean "ready" or
 # "chosen", red means "stop", amber marks a row that needs a second look.
 #
-# Dark theme. The two semantic colours that do not survive the move are called
-# out: a dark bottle green and a cream warning row both vanish against slate, so
-# "ready" becomes the emerald accent and the warning row becomes dark amber.
-INK        = "#e2e8f0"      # main text
-MUTED      = "#94a3b8"      # hints and secondary labels
-LINE       = "#334155"      # borders
-CANVAS     = "#0f172a"      # window background
-PANEL      = "#1e293b"      # cards
-CHOSEN     = "#10b981"      # a selected well
-CHOSEN_INK = "#04231a"
-EMPTY      = "#243244"      # an unselected well
-GOOD       = "#10b981"      # connected, blank done
-BAD        = "#f43f5e"      # simulation, blank missing
-WARN_ROW   = "#422006"      # a result with something to say
-ZEBRA      = "#172033"      # every other table row
-TITLE_BAR  = "#111c33"      # the app's own title strip
-WARN_BADGE = "#f59e0b"      # simulation: amber badge, dark text
-WARN_BADGE_INK = "#2b1a02"
-GOOD_BADGE = "#10b981"      # connected
-GOOD_BADGE_INK = "#04231a"
+# Light, and deliberately close to Gen5's own Take3 screen: pale grey chrome, a
+# blue header strip, white plate grids with blue-grey wells. The technician has
+# used that screen for years, so the less this one asks her to relearn the
+# better -- the colours are the part she reads without thinking.
+INK        = "#1f2933"      # main text
+MUTED      = "#5f6b7a"      # hints and secondary labels
+LINE       = "#c3ccd6"      # borders
+CANVAS     = "#eef1f5"      # window background
+PANEL      = "#ffffff"      # cards
+CHOSEN     = "#43a047"      # a selected well
+CHOSEN_INK = "#ffffff"
+EMPTY      = "#ffffff"      # an unselected well
+GOOD       = "#2e7d32"      # connected, blank done
+BAD        = "#c62828"      # simulation, blank missing
+WARN_ROW   = "#fff4dc"      # a result with something to say
+WARN_INK   = "#7a4a00"
+ZEBRA      = "#f5f8fb"      # every other table row
+TITLE_BAR  = "#3f72b0"      # the app's own title strip, as Gen5 heads a section
+TITLE_INK  = "#ffffff"
+TITLE_MUTED = "#d6e4f5"
+STATUS_BAR = "#e4e9ef"      # the hint strip along the bottom
+WARN_BADGE = "#f5b041"      # simulation: amber badge, dark text
+WARN_BADGE_INK = "#4a3000"
+GOOD_BADGE = "#2e7d32"      # connected
+GOOD_BADGE_INK = "#ffffff"
 
 # The wells. A blank is water and a sample is material, so they are not the same
-# green: the blank grid is a soft mint that reads as "prepared", the sample grid
-# a vivid green that reads as "loaded". An empty well is outline only.
-WELL_LINE       = "#475569"   # muted slate outline, unselected
-WELL_INK        = "#cbd5e1"
-BLANK_WELL      = "#6ee7b7"   # soft green, dark text
-BLANK_WELL_INK  = "#04231a"
-SAMPLE_WELL     = "#16a34a"   # vivid green
+# green: the blank grid is a soft green that reads as "prepared", the sample grid
+# a solid green that reads as "loaded". An empty well is white with a blue-grey
+# outline, which is how Gen5 draws an unselected microspot.
+WELL_LINE       = "#9db8d8"   # pale blue outline, unselected
+WELL_INK        = "#33414f"
+WELL_HOVER      = "#eaf2fb"
+BLANK_WELL      = "#cfe8d6"   # soft green, dark text
+BLANK_WELL_INK  = "#14532d"
+SAMPLE_WELL     = "#43a047"   # solid green
 SAMPLE_WELL_INK = "#ffffff"
-ACTION     = "#3b82f6"      # the button to press next
-ACTION_HOVER = "#60a5fa"
+ACTION     = "#3f72b0"      # the button to press next
+ACTION_HOVER = "#5a8bc8"
 ACTION_INK  = "#ffffff"
-ACTION_IDLE = "#334155"     # usable, but not the obvious next step
-ACTION_IDLE_HOVER = "#415577"
-ACTION_OFF = "#1b2537"      # would not do anything yet
-ACTION_OFF_INK = "#64748b"
+ACTION_IDLE = "#cfdceb"     # usable, but not the obvious next step
+ACTION_IDLE_HOVER = "#bccfe3"
+ACTION_IDLE_INK = "#24405e"  # dark text: white on pale blue is unreadable
+ACTION_OFF = "#dde3ea"      # would not do anything yet
+ACTION_OFF_INK = "#9aa5b1"
 ACTION_INK = "#ffffff"
 
 # Read from epoch_open.json beside the program; see epoch_open/config.py. Nothing
@@ -421,7 +429,7 @@ class App(tk.Tk):
                         bordercolor=LINE, lightcolor=PANEL, darkcolor=PANEL,
                         focuscolor=ACTION, relief="flat")
         style.map("TButton",
-                  background=[("active", "#2d3c52")],
+                  background=[("active", "#dde6ef")],
                   foreground=[("active", INK)])
 
         # No vertical separators: clam draws them through the body and the
@@ -437,7 +445,7 @@ class App(tk.Tk):
                         relief="flat", borderwidth=0, padding=(8, 10))
         style.map("Treeview.Heading", background=[("active", CANVAS)])
         style.map("Treeview",
-                  background=[("selected", "#2d3c52")],
+                  background=[("selected", "#cfe0f3")],
                   foreground=[("selected", INK)])
         style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
 
@@ -464,7 +472,7 @@ class App(tk.Tk):
                         bordercolor=CANVAS, arrowcolor=MUTED,
                         lightcolor=LINE, darkcolor=LINE, relief="flat")
         style.map("Dark.Vertical.TScrollbar",
-                  background=[("active", "#475569")])
+                  background=[("active", "#aab6c4")])
 
     # ---------------------------------------------------------------- layout
 
@@ -500,7 +508,7 @@ class App(tk.Tk):
 
         self.status = tk.Label(
             self, text=self._idle_text(), anchor="w", justify="left",
-            bg=TITLE_BAR, fg=MUTED, padx=16, pady=5 if self.compact else 8,
+            bg=STATUS_BAR, fg=MUTED, padx=16, pady=5 if self.compact else 8,
             font=(self.ui_font, self.base_pt - 1),
         )
         self.status.pack(fill="x", side="bottom")
@@ -510,10 +518,10 @@ class App(tk.Tk):
         bar = tk.Frame(self, bg=TITLE_BAR)
         bar.pack(fill="x")
 
-        tk.Label(bar, text=TEXT["title"], bg=TITLE_BAR, fg=INK,
+        tk.Label(bar, text=TEXT["title"], bg=TITLE_BAR, fg=TITLE_INK,
                  font=(self.ui_font, self.base_pt + 4, "bold"),
                  padx=16, pady=7 if self.compact else 12).pack(side="left")
-        tk.Label(bar, text=__version__, bg=TITLE_BAR, fg=MUTED,
+        tk.Label(bar, text=__version__, bg=TITLE_BAR, fg=TITLE_MUTED,
                  font=(self.ui_font, self.base_pt - 1)).pack(
             side="left", pady=(6, 0))
 
@@ -606,7 +614,7 @@ class App(tk.Tk):
                     grid, text=name, width=72,
                     height=20 if self.tiny else (22 if self.compact else 28), radius=4,
                     bg=EMPTY, fg=WELL_INK, outline=WELL_LINE,
-                    hover="#2d3c52", parent_bg=PANEL,
+                    hover=WELL_HOVER, parent_bg=PANEL,
                     font=("TkDefaultFont", self.base_pt - 1),
                     command=lambda n=name, s=selection, b=buttons: self._toggle(n, s, b),
                 )
@@ -693,7 +701,7 @@ class App(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         self.table.tag_configure("odd", background=ZEBRA)
         self.table.tag_configure("even", background=PANEL)
-        self.table.tag_configure("warn", background=WARN_ROW, foreground="#fde68a")
+        self.table.tag_configure("warn", background=WARN_ROW, foreground=WARN_INK)
 
     # --------------------------------------------------------------- state
 
@@ -702,7 +710,7 @@ class App(tk.Tk):
         if name in selection:
             selection.discard(name)
             button.configure(bg=EMPTY, fg=WELL_INK, outline=WELL_LINE,
-                             hover="#2d3c52",
+                             hover=WELL_HOVER,
                              font=("TkDefaultFont", self.base_pt - 1))
         else:
             selection.add(name)
@@ -812,7 +820,8 @@ class App(tk.Tk):
             else:
                 is_next = key == nxt
                 button.configure(
-                    state="normal", cursor="hand2", fg=ACTION_INK,
+                    state="normal", cursor="hand2",
+                    fg=ACTION_INK if is_next else ACTION_IDLE_INK,
                     bg=ACTION if is_next else ACTION_IDLE,
                     hover=ACTION_HOVER if is_next else ACTION_IDLE_HOVER,
                 )
