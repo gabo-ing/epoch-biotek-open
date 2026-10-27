@@ -87,7 +87,7 @@ Take3's data sheet.
 | Python | 3.10 or newer (it uses `X \| None` annotations). Run here on 3.13 |
 | `pyserial` | the only third-party library, and only to talk to the instrument |
 | tkinter | for the window. Bundled with Python on Windows and macOS; a separate package on Linux |
-| `pyinstaller` | only to build the Windows `.exe` |
+| `pyinstaller` | only to build the Windows `.exe` or the macOS `.app` |
 
 Everything else — the Excel writer, the config file, the test runner — is written
 against the standard library on purpose, so there is as little as possible to
@@ -125,9 +125,26 @@ program will find the reader and still be unable to open it.
 
 ### macOS
 
-    pip3 install pyserial
+Install Python from <https://www.python.org/downloads/> rather than using the
+`python3` that ships with macOS, which has come with a Tk too old to draw this
+correctly. Then:
 
-tkinter comes with the python.org build. Untested: no one has run this on a Mac.
+    pip3 install pyserial
+    python3 run_gui.py
+
+`bash build_macos.sh` produces `dist/EpochTake3.app`. PyInstaller cannot
+cross-compile, so that has to run on a Mac. The result is unsigned, so the first
+launch is refused with "cannot be opened because the developer cannot be
+verified" — right-click the app, choose Open, then Open again, which is
+remembered. Signing it properly needs an Apple Developer ID.
+
+No driver is needed: the FTDI driver has been part of macOS since 10.9, and the
+reader is found by its USB serial number rather than by any device path, so
+`/dev/cu.usbserial-*` works without changes.
+
+**Untested.** The program has been run on Linux and is used on Windows. Nothing
+in it is platform-specific — the one Windows-only call returns immediately
+elsewhere — but nobody has yet run it against an Epoch from a Mac.
 
 ## Running it today
 
