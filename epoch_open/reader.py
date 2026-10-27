@@ -11,6 +11,7 @@ EpochReader is the real one, and every unknown in it is marked.
 """
 
 import random
+import sys
 from dataclasses import dataclass
 
 from . import take3
@@ -40,14 +41,38 @@ class ReaderError(Exception):
     """Something went wrong talking to the instrument."""
 
 
+def pyserial_hint() -> str:
+    """How to install pyserial on the machine this is actually running on.
+
+    The message used to name a Debian command whatever the platform, which is
+    no help to the Mac or Windows users this is meant to be shared with.
+    """
+    if sys.platform == "win32":
+        return "Install it with:  py -m pip install pyserial"
+    if sys.platform == "darwin":
+        return (
+            "Install it with:  pip3 install pyserial\n"
+            "If that is refused as an 'externally managed environment', use a "
+            "virtual environment:\n"
+            "    python3 -m venv ~/epoch-venv\n"
+            "    source ~/epoch-venv/bin/activate\n"
+            "    pip install pyserial"
+        )
+    return (
+        "Install it with:  sudo apt install python3-serial   (Debian/Ubuntu)\n"
+        "or:               sudo dnf install python3-pyserial (Fedora)\n"
+        "or:               pip install pyserial"
+    )
+
+
 def _list_ports():
     """Attached serial ports, via pyserial."""
     try:
         from serial.tools import list_ports
     except ImportError as exc:  # pragma: no cover - depends on the install
         raise ReaderError(
-            "pyserial is not installed, so the reader cannot be found. "
-            "On Debian: apt install python3-serial"
+            "pyserial is not installed, so the reader cannot be found.\n\n"
+            + pyserial_hint()
         ) from exc
     return list(list_ports.comports())
 
@@ -282,7 +307,7 @@ class EpochReader(ReaderBackend):
             import serial
         except ImportError as exc:  # pragma: no cover - depends on the install
             raise ReaderError(
-                "pyserial is not installed. On Debian: apt install python3-serial"
+                "pyserial is not installed.\n\n" + pyserial_hint()
             ) from exc
 
         port = self.port or self.find_port(self.expected_serial)

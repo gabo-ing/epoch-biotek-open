@@ -127,7 +127,9 @@ program will find the reader and still be unable to open it.
 
 Install Python from <https://www.python.org/downloads/> rather than using the
 `python3` that ships with macOS, which has come with a Tk too old to draw this
-correctly. Then:
+correctly. Homebrew's Python does not include Tk at all — it is packaged
+separately as `brew install python-tk@3.13` (matching your minor version), and
+without it the program stops with `ModuleNotFoundError: _tkinter`. Then:
 
     pip3 install pyserial
     python3 run_gui.py
