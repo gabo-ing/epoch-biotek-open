@@ -85,8 +85,8 @@ class TestSaving:
         directory.mkdir(exist_ok=True)
         path = directory / "roundtrip.json"
 
-        cfg = config.Config(reader_serial=None, plate_serial="999888",
-                            pathlengths_mm={"A2": 0.5111, "H3": 0.4982})
+        cfg = config.Config(reader_serial=None)
+        cfg.set_plate("999888", {"A2": 0.5111, "H3": 0.4982})
         config.save(cfg, path)
 
         back = config.load(path)
@@ -103,6 +103,57 @@ class TestSaving:
     def test_saved_pathlengths_override_the_builtin_plate(self):
         directory = Path(__file__).resolve().parent / "_out"
         path = directory / "override.json"
-        config.save(config.Config(plate_serial="243819",
-                                  pathlengths_mm={"A2": 0.6000}), path)
+        cfg = config.Config()
+        cfg.set_plate("243819", {"A2": 0.6000})
+        config.save(cfg, path)
         assert config.load(path).pathlengths["A2"] == 0.6
+
+
+class TestPlatesAreKeptPerSerial:
+    """The bug this guards: one stored table meant that registering a
+    replacement plate and later switching back left the first plate using the
+    replacement's pathlengths, about 2% wrong and invisible."""
+
+    def path(self, name):
+        directory = Path(__file__).resolve().parent / "_out"
+        directory.mkdir(exist_ok=True)
+        p = directory / name
+        if p.exists():
+            p.unlink()
+        return p
+
+    def test_switching_back_restores_the_original_sheet(self):
+        p = self.path("swap.json")
+        cfg = config.load(p)
+        cfg.set_plate("999999", {f"{r}{c}": 0.52 for r in "ABCDEFGH" for c in (2, 3)})
+        config.save(cfg, p)
+
+        cfg = config.load(p)
+        assert cfg.pathlengths["A2"] == 0.52
+
+        cfg.set_plate("243819", None)
+        config.save(cfg, p)
+        assert config.load(p).pathlengths["A2"] == 0.5125   # the built-in sheet
+
+    def test_each_plate_keeps_its_own_values(self):
+        p = self.path("two.json")
+        cfg = config.load(p)
+        cfg.set_plate("AAA", {"A2": 0.5101})
+        cfg.set_plate("BBB", {"A2": 0.4902})
+        config.save(cfg, p)
+
+        cfg = config.load(p)
+        assert cfg.pathlengths_for("AAA")["A2"] == 0.5101
+        assert cfg.pathlengths_for("BBB")["A2"] == 0.4902
+
+    def test_a_plate_registered_without_a_sheet_stays_uncalibrated(self):
+        p = self.path("nominal.json")
+        cfg = config.load(p)
+        cfg.set_plate("NOSHEET", None)
+        config.save(cfg, p)
+        assert config.load(p).pathlengths is None
+
+    def test_the_old_single_table_format_still_loads(self):
+        p = self.path("legacy.json")
+        p.write_text(json.dumps({"plate_serial": "777", "pathlengths_mm": {"A2": 0.5}}))
+        assert config.load(p).pathlengths["A2"] == 0.5

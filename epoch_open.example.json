@@ -1,18 +1,20 @@
 {
-  "_comment": "Rename to epoch_open.json and put it beside EpochTake3.exe. Every field is optional.",
+  "_comment": "Rename to epoch_open.json and put it beside EpochTake3.exe. You do not need to edit this by hand: use 'Cambiar placa...' in the program.",
 
   "reader_serial": null,
 
-  "plate_serial": "YOUR-TAKE3-SERIAL",
+  "plate_serial": "243819",
 
-  "pathlengths_mm": {
-    "A2": 0.5000, "A3": 0.5000,
-    "B2": 0.5000, "B3": 0.5000,
-    "C2": 0.5000, "C3": 0.5000,
-    "D2": 0.5000, "D3": 0.5000,
-    "E2": 0.5000, "E3": 0.5000,
-    "F2": 0.5000, "F3": 0.5000,
-    "G2": 0.5000, "G3": 0.5000,
-    "H2": 0.5000, "H3": 0.5000
+  "plates": {
+    "243819": {
+      "A2": 0.5125, "A3": 0.5096,
+      "B2": 0.5063, "B3": 0.5087,
+      "C2": 0.5041, "C3": 0.5043,
+      "D2": 0.4999, "D3": 0.5006,
+      "E2": 0.4991, "E3": 0.4992,
+      "F2": 0.5003, "F3": 0.4993,
+      "G2": 0.4988, "G3": 0.4973,
+      "H2": 0.4980, "H3": 0.4982
+    }
   }
 }

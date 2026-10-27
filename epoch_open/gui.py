@@ -59,6 +59,7 @@ TEXT = {
                         "opticos van entre 0,2 y 1,2 mm (normalmente ~0,5)."),
     "plate_incomplete": ("Faltan {n} pozos. Completa los 16 valores de la hoja, "
                          "o elige 'Usar 0,5 mm nominal'."),
+    "plate_known": "Esta placa ya estaba registrada; se muestran sus valores.",
     "blank_pending": "Falta leer el blanco",
     "blank_done": "Blanco leido: {wells}",
     "batch_empty": "Lote vacio",
@@ -409,9 +410,8 @@ class App(tk.Tk):
 
         serial, table = dialog.result
         self.plate_serial = serial
-        self.pathlengths = table or None
-        CONFIG.plate_serial = serial
-        CONFIG.pathlengths_mm = dict(table or {})
+        CONFIG.set_plate(serial, table)
+        self.pathlengths = CONFIG.pathlengths
         try:
             config.save(CONFIG)
         except OSError as exc:
@@ -633,6 +633,11 @@ class PlateDialog(tk.Toplevel):
         self.serial = tk.StringVar(value=serial or "")
         serial_entry = ttk.Entry(row, textvariable=self.serial, width=14)
         serial_entry.pack(side="left", padx=(8, 0))
+        self._opened_with = (serial or "").strip()
+        self.serial.trace_add("write", self._serial_changed)
+
+        self.known_label = ttk.Label(body, text="", style="Good.TLabel")
+        self.known_label.pack(anchor="w", pady=(0, 6))
 
         grid = ttk.LabelFrame(body, text="mm", padding=10,
                               style="Card.TLabelframe")
@@ -674,6 +679,27 @@ class PlateDialog(tk.Toplevel):
         self.grab_set()
 
     # ------------------------------------------------------------------
+
+    def _serial_changed(self, *_args) -> None:
+        """Repopulate when the serial changes, so one plate's numbers cannot be
+        saved under another plate's serial.
+
+        Typing a new serial over a pre-filled form and pressing save would
+        otherwise register the new plate with the old plate's pathlengths, which
+        is wrong by a couple of percent and invisible afterwards.
+        """
+        typed = self.serial.get().strip()
+        if typed == self._opened_with:
+            return
+        self._opened_with = typed
+
+        known = CONFIG.pathlengths_for(typed) if typed else None
+        for well, var in self.entries.items():
+            var.set(f"{known[well]:.4f}" if known and well in known else "")
+        self.known_label.configure(
+            text=TEXT["plate_known"] if known else "",
+            style="Good.TLabel" if known else "Muted.TLabel",
+        )
 
     def _serial_or_complain(self) -> str | None:
         serial = self.serial.get().strip()
