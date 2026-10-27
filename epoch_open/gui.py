@@ -29,6 +29,10 @@ TEXT = {
     "connected": "Lector {model}, serie {serial}, firmware {firmware}, en {port}",
     "searching": "MODO SIMULACION - buscando el lector... Los numeros NO son medidas reales.",
     "lost": "EL LECTOR NO RESPONDE - comprueba que sigue encendido. Reintentando...",
+    "no_reader": "Enciende el lector para poder medir. Buscandolo...",
+    "no_reader_hint": ("El lector no esta conectado. Enciendelo y espera unos "
+                       "segundos: el programa lo detecta solo y se activan los "
+                       "botones de lectura."),
     "found_now": "Lector encontrado y conectado. Ya puedes leer de verdad.",
     "found_busy_title": "Lector encontrado",
     "found_busy": "Se ha encontrado el lector encendido.\n\nEl lote actual tiene datos SIMULADOS, que no se pueden mezclar con medidas reales.\n\n¿Descartar el lote simulado y usar el lector?",
@@ -303,8 +307,14 @@ class App(tk.Tk):
         self.title(f'{TEXT["title"]}  {__version__}')
         self._size_to_screen()
 
-        self.backend = backend or MockReader()
-        self.simulated = isinstance(self.backend, MockReader)
+        # None means no instrument was found. The program then shows the screen
+        # but refuses to read: inventing numbers that look like measurements is
+        # a worse failure than being unable to measure. The simulator is still
+        # there for tests and for looking at the screen, but it has to be asked
+        # for with --sim, which nobody types by accident.
+        self.backend = backend
+        self.no_reader = backend is None
+        self.simulated = isinstance(backend, MockReader)
 
         # The technician will often start the program before switching the Epoch
         # on. Rather than make her restart it, keep looking for the instrument in
@@ -318,11 +328,16 @@ class App(tk.Tk):
         self._port_lock = threading.Lock()
         # An EpochReader handed to us is already connected; re-connecting would
         # renegotiate the baud rate for nothing.
-        self.info = (
-            self.backend.connect() if self.simulated
-            else ReaderInfo(model="Epoch", serial=self.backend.expected_serial or "?",
-                            firmware="1.12", port=self.backend.port or "?")
-        )
+        if self.no_reader:
+            self.info = ReaderInfo(model="Epoch", serial="?",
+                                   firmware="?", port="?")
+        elif self.simulated:
+            self.info = self.backend.connect()
+        else:
+            self.info = ReaderInfo(
+                model="Epoch", serial=self.backend.expected_serial or "?",
+                firmware="1.12", port=self.backend.port or "?",
+            )
 
         self.blank_selected: set[str] = set()
         self.sample_selected: set[str] = set()
@@ -539,7 +554,10 @@ class App(tk.Tk):
         weight instead, because this is the state in which the screen is showing
         numbers that were never measured.
         """
-        if self.lost:
+        if self.no_reader:
+            text = TEXT["no_reader"]
+            bg, fg = WARN_BADGE, WARN_BADGE_INK
+        elif self.lost:
             text, bg, fg = TEXT["lost"], BAD, "#ffffff"
         elif self.simulated:
             text = TEXT["searching"] if self.watching else TEXT["simulated"]
@@ -808,11 +826,16 @@ class App(tk.Tk):
         else:
             nxt = "end_batch"
 
+        # Nothing can be read without an instrument that is answering. The
+        # buttons say so by being unpressable rather than by failing afterwards.
+        can_read = not (self.no_reader or self.lost)
         usable = {
-            "read_blank": True,
-            "read_samples": self.blank is not None,
+            "read_blank": can_read,
+            "read_samples": can_read and self.blank is not None,
             "end_batch": bool(self.results),
         }
+        if not can_read:
+            nxt = "end_batch" if self.results else None
         for key, button in self.action_buttons.items():
             if not usable[key]:
                 button.configure(state="disabled", bg=ACTION_OFF,
@@ -827,6 +850,8 @@ class App(tk.Tk):
                 )
 
     def _idle_text(self) -> str:
+        if self.no_reader:
+            return TEXT["no_reader_hint"]
         return TEXT["instructions_short"] if self.compact else TEXT["instructions"]
 
     def _say(self, message: str) -> None:
@@ -872,7 +897,7 @@ class App(tk.Tk):
         self.after(self.PROBE_MS, self._probe_tick)
 
     def _needs_reader(self) -> bool:
-        return self.simulated or self.lost
+        return self.simulated or self.lost or self.no_reader
 
     def _probe(self) -> None:
         """Background thread: try to open the reader, give up quietly if absent."""
@@ -914,6 +939,7 @@ class App(tk.Tk):
         self.backend = reader
         self.simulated = False
         self.lost = False
+        self.no_reader = False
         self.info = ReaderInfo(
             model="Epoch", serial=reader.expected_serial or "?",
             firmware="1.12", port=reader.port or "?",
@@ -938,6 +964,10 @@ class App(tk.Tk):
     # -------------------------------------------------------------- actions
 
     def _read(self, wells: list[str], as_blank: bool):
+        if self.backend is None:
+            # The buttons are disabled in this state, so this is a backstop
+            # rather than a path anyone should reach.
+            raise ReaderError(TEXT["no_reader_hint"])
         if isinstance(self.backend, MockReader):
             # Simulation only: tell the fake instrument what is on the plate.
             self.backend.simulating_blank = as_blank
@@ -1233,10 +1263,16 @@ class PlateDialog(tk.Toplevel):
 
 
 def connect_backend(force_simulator: bool = False):
-    """The real instrument when it answers, the simulator when it does not.
+    """The real instrument, or None when it does not answer.
 
-    Falling back rather than failing matters: the technician can still look at the
-    program, and the red banner makes the difference impossible to miss.
+    It used to fall back to the simulator, so that an Epoch that was merely
+    switched off produced a screen full of invented numbers behind a warning
+    banner. That is the wrong failure: a quantification that cannot happen
+    should look like nothing, not like a result. Without an instrument the
+    program opens with reading disabled and waits for one to appear.
+
+    The simulator is still here, for the tests and for looking at the screen
+    without hardware, but it has to be asked for.
     """
     if force_simulator:
         return MockReader()
@@ -1246,8 +1282,9 @@ def connect_backend(force_simulator: bool = False):
         reader.connect()
         return reader
     except (ReaderError, NotImplementedError, OSError) as exc:
-        print(f"No reader: {exc}\nStarting in simulation mode.", file=sys.stderr)
-        return MockReader()
+        print(f"No reader: {exc}\nReading is disabled until one is found.",
+              file=sys.stderr)
+        return None
 
 
 def main() -> int:

@@ -41,17 +41,21 @@ hand-rolled against the standard library, so nothing else has to be bundled.
 
 ## 4. Check before handing it over
 
-1. Run the exe with **no reader attached**. It must open, show the amber simulation
-   badge, and let a fake read be taken and saved. If it crashes here, it will crash
-   in front of the technician.
-2. Open a saved file in the lab's own Excel — not just LibreOffice.
+1. Run the exe with **no reader attached**. It must open, show the amber "enciende
+   el lector" badge, and have the read buttons greyed out. If it offers to read, or
+   produces any number at all in this state, stop: that build is the old one that
+   fell back to the simulator.
+2. Open a saved file in the lab's own Excel — not just LibreOffice. To produce one
+   for this check without an instrument, run the exe from a command prompt with
+   `EpochTake3.exe --sim`; everything it saves that way is labelled simulated.
 3. With the exe still running, switch the reader on. Within a few seconds the badge
    must turn green by itself and report serial 254717 and firmware 1.12, with no
    restart. This is the check that matters most, because it is the order the
    technician will actually do things in.
 4. Switch the reader off again while the program is open and take a read. It must
-   say the reader is not answering. If it silently produces numbers instead, stop
-   and do not hand it over: those numbers are simulated.
+   say the reader is not answering and grey the read buttons out again. If it
+   silently produces numbers instead, stop and do not hand it over: those numbers
+   are simulated.
 5. Run the paired validation in `docs/WISHLIST.md` before it is used for real results.
 
 ## 5. Where it lives

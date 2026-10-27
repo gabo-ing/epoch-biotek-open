@@ -82,21 +82,29 @@ Take3's data sheet.
 
 ## Running it today
 
-The whole program works now against a built-in simulator, so the screen and the
-spreadsheet can be reviewed before the instrument is talking:
-
     python3 run_gui.py
 
-It opens with an amber badge in the title bar saying the numbers are simulated, and
-any file it saves carries the same warning inside. Needs tkinter (bundled with
-Python on Windows; on Debian/Ubuntu `apt install python3-tk`).
+Needs tkinter (bundled with Python on Windows; on Debian/Ubuntu
+`apt install python3-tk`).
+
+**Without an instrument it will not produce numbers.** The window opens, the plate
+can be laid out and a saved file can be reopened, but the read buttons are greyed
+out and an amber badge says to switch the reader on. It used to fall back to a
+built-in simulator, which meant an Epoch that was merely switched off gave a screen
+full of invented values behind a warning banner — one misread banner away from
+simulated figures in a lab notebook.
+
+The simulator is still there for development and for reviewing the screen without
+hardware, but it has to be asked for, and anything it produces is labelled
+simulated on screen and inside any file it saves:
+
+    python3 run_gui.py --sim
 
 The order you switch things on does not matter. If the reader is not there at
-startup the program keeps looking for it every few seconds and turns the badge
-green by itself once it answers, so there is no need to restart it. Simulated
-readings are never folded into a real batch: if any are already on screen when the
-instrument appears, it asks first and discards them. If the reader stops answering
-mid-session the banner says so instead of quietly reverting to simulated numbers.
+startup the program keeps looking for it every few seconds, turns the badge green
+by itself once it answers and enables the read buttons, so there is no need to
+restart it. If the reader stops answering mid-session the badge says so and
+reading is disabled again, rather than quietly reverting to simulated numbers.
 
 ## Running the tests
 
