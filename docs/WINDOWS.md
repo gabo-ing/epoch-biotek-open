@@ -41,11 +41,11 @@ hand-rolled against the standard library, so nothing else has to be bundled.
 
 ## 4. Check before handing it over
 
-1. Run the exe with **no reader attached**. It must open, show the red simulator
-   banner, and let a fake read be taken and saved. If it crashes here, it will crash
+1. Run the exe with **no reader attached**. It must open, show the amber simulation
+   badge, and let a fake read be taken and saved. If it crashes here, it will crash
    in front of the technician.
 2. Open a saved file in the lab's own Excel — not just LibreOffice.
-3. With the exe still running, switch the reader on. Within a few seconds the banner
+3. With the exe still running, switch the reader on. Within a few seconds the badge
    must turn green by itself and report serial 254717 and firmware 1.12, with no
    restart. This is the check that matters most, because it is the order the
    technician will actually do things in.

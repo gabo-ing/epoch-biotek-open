@@ -18,7 +18,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__, config, take3
-from .quant import QuantError, blank_for, check_blanks, quantify, wavelengths_for
+from .quant import (QuantError, blank_for, check_blanks, quantify, unit_for,
+                    wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import export_results
 
@@ -85,31 +86,197 @@ TEXT = {
     "saved": "Guardado en {path}. Lote cerrado.",
     "save_error": "No se pudo guardar el archivo:\n\n{error}",
     "read_error": "No se pudo leer:\n\n{error}",
-    "columns": ("Lectura:Pozo", "Conc.", "260/280", "260/230", "Unidad", "Aviso"),
+    "columns": ("Lectura:Pozo", "Conc.", "260/280", "260/230", "Aviso"),
+    "column_conc": "Conc. ({unit})",
     "instructions": (
         "1. Carga 2 uL de agua en los pozos del blanco y pulsa 'Leer blanco'.\n"
         "2. Limpia, carga 2 uL de cada muestra y pulsa 'Leer muestras'. "
         "Puedes repetir con mas placas; todo se acumula en el mismo lote.\n"
         "3. Cuando termines, pulsa 'Fin del lote' para guardar el Excel."
     ),
+    # One line, for a laptop screen that has no room for three. The buttons are
+    # numbered and the unavailable ones are greyed out, so the order is already
+    # visible without the full text.
+    "instructions_short": (
+        "Blanco con agua -> muestras -> fin del lote. "
+        "Doble clic en un pozo para ponerle nombre."
+    ),
 }
 
 SAMPLE_TYPES = ("dsDNA", "ssDNA", "RNA", "protein")
 
+
+class RoundedButton(tk.Canvas):
+    """A flat button with rounded corners, drawn rather than themed.
+
+    tkinter's Button has no corner radius and ttk's themes will not give one, so
+    the shape is drawn on a canvas. It accepts the same bg/fg/text/state keywords
+    the rest of the screen already passes to Button, so it drops straight in
+    wherever one was used.
+    """
+
+    def __init__(self, parent, text="", command=None, width=70, height=26,
+                 radius=4, bg="#1e293b", fg="#e2e8f0", outline="",
+                 hover=None, parent_bg="#0f172a",
+                 font=("TkDefaultFont", 9), stretch=False):
+        super().__init__(parent, width=width, height=height, bg=parent_bg,
+                         highlightthickness=0, bd=0, takefocus=0)
+        self._text = text
+        self._command = command
+        self._radius = radius
+        self._bg = bg
+        self._fg = fg
+        self._outline = outline
+        self._hover = hover
+        self._font = font
+        self._state = "normal"
+        self._hovering = False
+
+        self.bind("<Button-1>", self._clicked)
+        self.bind("<Enter>", self._entered)
+        self.bind("<Leave>", self._left)
+        # Redraw whenever the real size is known, not only when stretching: the
+        # size at construction time is the requested one, not the mapped one.
+        self.bind("<Configure>", lambda _e: self._draw())
+        self._draw()
+
+    # -- drawing ------------------------------------------------------------
+
+    def _rounded(self, x1, y1, x2, y2, r, **kw):
+        """A rounded rectangle as a smoothed polygon."""
+        points = [
+            x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r,
+            x2, y2 - r, x2, y2, x2 - r, y2, x1 + r, y2,
+            x1, y2, x1, y2 - r, x1, y1 + r, x1, y1,
+        ]
+        return self.create_polygon(points, smooth=True, splinesteps=12, **kw)
+
+    def _draw(self) -> None:
+        self.delete("all")
+        # An unmapped widget reports 1, not 0, so this cannot be an "or": every
+        # well was being drawn one pixel wide until the first redraw.
+        width = self.winfo_width()
+        if width <= 1:
+            width = int(super().cget("width"))
+        height = self.winfo_height()
+        if height <= 1:
+            height = int(super().cget("height"))
+
+        fill = self._bg
+        if self._hovering and self._state == "normal" and self._hover:
+            fill = self._hover
+
+        self._rounded(1, 1, width - 1, height - 1, self._radius,
+                      fill=fill, outline=self._outline or fill,
+                      width=1 if self._outline else 1)
+        self.create_text(width / 2, height / 2, text=self._text,
+                         fill=self._fg, font=self._font)
+
+    # -- behaviour ----------------------------------------------------------
+
+    def _clicked(self, _event) -> None:
+        if self._state == "normal" and self._command:
+            self._command()
+
+    def _entered(self, _event) -> None:
+        self._hovering = True
+        if self._state == "normal":
+            self.configure(cursor="hand2")
+        self._draw()
+
+    def _left(self, _event) -> None:
+        self._hovering = False
+        self._draw()
+
+    # -- the Button-shaped interface the rest of the screen uses -------------
+
+    def configure(self, **kw):           # noqa: D102 - matches tk.Button
+        redraw = False
+        for key in ("bg", "background"):
+            if key in kw:
+                self._bg = kw.pop(key)
+                redraw = True
+        for key in ("fg", "foreground"):
+            if key in kw:
+                self._fg = kw.pop(key)
+                redraw = True
+        if "text" in kw:
+            self._text = kw.pop("text")
+            redraw = True
+        if "font" in kw:
+            self._font = kw.pop("font")
+            redraw = True
+        if "outline" in kw:
+            self._outline = kw.pop("outline")
+            redraw = True
+        if "hover" in kw:
+            self._hover = kw.pop("hover")
+            redraw = True
+        if "state" in kw:
+            self._state = kw.pop("state")
+            redraw = True
+        kw.pop("activebackground", None)
+        kw.pop("activeforeground", None)
+        kw.pop("disabledforeground", None)
+        if kw:
+            super().configure(**kw)
+        if redraw:
+            self._draw()
+        return None
+
+    config = configure
+
+    def cget(self, key):                 # noqa: D102 - matches tk.Button
+        return {
+            "bg": self._bg, "background": self._bg,
+            "fg": self._fg, "foreground": self._fg,
+            "text": self._text, "state": self._state,
+            "font": self._font,
+        }.get(key, super().cget(key))
+
+    def __getitem__(self, key):
+        return self.cget(key)
+
 # One place for colour, so the screen stays coherent. Greens mean "ready" or
 # "chosen", red means "stop", amber marks a row that needs a second look.
-INK        = "#1f2933"      # main text
-MUTED      = "#5c6b7a"      # hints and secondary labels
-LINE       = "#d4dae0"      # borders
-CANVAS     = "#f4f6f8"      # window background
-PANEL      = "#ffffff"      # cards
-CHOSEN     = "#4f9d3a"      # a selected well
-CHOSEN_INK = "#ffffff"
-EMPTY      = "#fbfcfd"      # an unselected well
-GOOD       = "#1b5e20"      # connected, blank done
-BAD        = "#b00020"      # simulation, blank missing
-WARN_ROW   = "#fff6e6"      # a result with something to say
-ACTION     = "#2f6fb0"      # the three main buttons
+#
+# Dark theme. The two semantic colours that do not survive the move are called
+# out: a dark bottle green and a cream warning row both vanish against slate, so
+# "ready" becomes the emerald accent and the warning row becomes dark amber.
+INK        = "#e2e8f0"      # main text
+MUTED      = "#94a3b8"      # hints and secondary labels
+LINE       = "#334155"      # borders
+CANVAS     = "#0f172a"      # window background
+PANEL      = "#1e293b"      # cards
+CHOSEN     = "#10b981"      # a selected well
+CHOSEN_INK = "#04231a"
+EMPTY      = "#243244"      # an unselected well
+GOOD       = "#10b981"      # connected, blank done
+BAD        = "#f43f5e"      # simulation, blank missing
+WARN_ROW   = "#422006"      # a result with something to say
+ZEBRA      = "#172033"      # every other table row
+TITLE_BAR  = "#111c33"      # the app's own title strip
+WARN_BADGE = "#f59e0b"      # simulation: amber badge, dark text
+WARN_BADGE_INK = "#2b1a02"
+GOOD_BADGE = "#10b981"      # connected
+GOOD_BADGE_INK = "#04231a"
+
+# The wells. A blank is water and a sample is material, so they are not the same
+# green: the blank grid is a soft mint that reads as "prepared", the sample grid
+# a vivid green that reads as "loaded". An empty well is outline only.
+WELL_LINE       = "#475569"   # muted slate outline, unselected
+WELL_INK        = "#cbd5e1"
+BLANK_WELL      = "#6ee7b7"   # soft green, dark text
+BLANK_WELL_INK  = "#04231a"
+SAMPLE_WELL     = "#16a34a"   # vivid green
+SAMPLE_WELL_INK = "#ffffff"
+ACTION     = "#3b82f6"      # the button to press next
+ACTION_HOVER = "#60a5fa"
+ACTION_INK  = "#ffffff"
+ACTION_IDLE = "#334155"     # usable, but not the obvious next step
+ACTION_IDLE_HOVER = "#415577"
+ACTION_OFF = "#1b2537"      # would not do anything yet
+ACTION_OFF_INK = "#64748b"
 ACTION_INK = "#ffffff"
 
 # Read from epoch_open.json beside the program; see epoch_open/config.py. Nothing
@@ -126,7 +293,7 @@ class App(tk.Tk):
     def __init__(self, backend=None, watch: bool = False):
         super().__init__()
         self.title(f'{TEXT["title"]}  {__version__}')
-        self.minsize(1120, 720)
+        self._size_to_screen()
 
         self.backend = backend or MockReader()
         self.simulated = isinstance(self.backend, MockReader)
@@ -153,6 +320,7 @@ class App(tk.Tk):
         self.sample_selected: set[str] = set()
         self.blank_buttons: dict[str, tk.Button] = {}
         self.sample_buttons: dict[str, tk.Button] = {}
+        self.action_buttons: dict[str, tk.Button] = {}
 
         self.sample_names: dict[str, str] = {}
         self.plate_serial = CONFIG.plate_serial
@@ -181,6 +349,46 @@ class App(tk.Tk):
 
     # ---------------------------------------------------------------- styling
 
+    def _size_to_screen(self) -> None:
+        """Open at a sensible size for whatever screen this is, and centre it.
+
+        A fixed 1120x720 was wider than a 1366x768 laptop can show once the
+        window border and taskbar are taken off, and the column that fell off
+        the right-hand edge was the one carrying the warnings.
+        """
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+
+        width = min(1180, screen_w - 80)
+        height = min(980, screen_h - 70)
+        self.minsize(min(900, width), min(600, height))
+
+        x = max(0, (screen_w - width) // 2)
+        y = max(0, (screen_h - height) // 3)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+
+        # Readable at arm's length on a roomy screen, but a cramped laptop needs
+        # the space more than it needs the extra point.
+        self.tiny = screen_h < 760
+        self.compact = screen_h < 1000
+        self.base_pt = 10 if self.compact else 11
+        self.ui_font = self._pick_font()
+
+    def _pick_font(self) -> str:
+        """The platform's own interface face, falling back to Tk's default.
+
+        Named explicitly rather than left to TkDefaultFont, which on Windows is
+        still Tahoma 8 on some systems and looks a decade out of date.
+        """
+        from tkinter import font as tkfont
+
+        available = {name.lower() for name in tkfont.families(self)}
+        for candidate in ("Segoe UI", "SF Pro Text", "Helvetica Neue",
+                          "Ubuntu", "Cantarell", "DejaVu Sans"):
+            if candidate.lower() in available:
+                return candidate
+        return "TkDefaultFont"
+
     def _style(self) -> None:
         """Tk's default theme is the 1990s Motif look. 'clam' is plain but current."""
         self.configure(bg=CANVAS)
@@ -188,33 +396,75 @@ class App(tk.Tk):
         if "clam" in style.theme_names():
             style.theme_use("clam")
 
-        base = ("TkDefaultFont", 10)
+        pt = self.base_pt
+        family = self.ui_font
+        base = (family, pt)
         style.configure(".", background=CANVAS, foreground=INK, font=base)
         style.configure("TFrame", background=CANVAS)
         style.configure("TLabel", background=CANVAS, foreground=INK)
         style.configure("Muted.TLabel", foreground=MUTED)
         style.configure("Good.TLabel", foreground=GOOD)
         style.configure("Bad.TLabel", foreground=BAD)
-        style.configure("Head.TLabel", font=("TkDefaultFont", 11, "bold"))
+        style.configure("Head.TLabel", font=(family, pt + 3, "bold"))
 
         style.configure("Card.TLabelframe", background=PANEL,
                         bordercolor=LINE, relief="solid", borderwidth=1)
         style.configure("Card.TLabelframe.Label", background=PANEL,
-                        foreground=MUTED, font=("TkDefaultFont", 9, "bold"))
+                        foreground=MUTED, font=(family, pt, "bold"))
         style.configure("Card.TFrame", background=PANEL)
         style.configure("Card.TLabel", background=PANEL, foreground=INK)
         style.configure("CardMuted.TLabel", background=PANEL, foreground=MUTED,
-                        font=("TkDefaultFont", 9))
+                        font=(family, pt - 1))
 
-        style.configure("TButton", padding=(10, 5))
-        style.map("TButton", background=[("active", "#e8edf2")])
+        style.configure("TButton", padding=(10, 6), font=base,
+                        background=PANEL, foreground=INK,
+                        bordercolor=LINE, lightcolor=PANEL, darkcolor=PANEL,
+                        focuscolor=ACTION, relief="flat")
+        style.map("TButton",
+                  background=[("active", "#2d3c52")],
+                  foreground=[("active", INK)])
 
-        style.configure("Treeview", background=PANEL, fieldbackground=PANEL,
-                        rowheight=24, borderwidth=0)
-        style.configure("Treeview.Heading", font=("TkDefaultFont", 9, "bold"),
-                        padding=(4, 5))
-        style.configure("TCheckbutton", background=CANVAS)
-        style.configure("TCombobox", padding=3)
+        # No vertical separators: clam draws them through the body and the
+        # headings, and they fight with the numbers. Rows are told apart by
+        # alternating background instead, which ttk.Treeview can actually do --
+        # it has no per-row rule, so a hairline divider is not on offer.
+        style.configure("Treeview",
+                        background=PANEL, fieldbackground=PANEL,
+                        foreground=INK, rowheight=pt * 2 + 14,
+                        borderwidth=0, relief="flat", font=base)
+        style.configure("Treeview.Heading", font=(family, pt, "bold"),
+                        background=CANVAS, foreground=MUTED,
+                        relief="flat", borderwidth=0, padding=(8, 10))
+        style.map("Treeview.Heading", background=[("active", CANVAS)])
+        style.map("Treeview",
+                  background=[("selected", "#2d3c52")],
+                  foreground=[("selected", INK)])
+        style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
+
+        style.configure("TEntry", fieldbackground=PANEL, foreground=INK,
+                        bordercolor=LINE, lightcolor=LINE, darkcolor=LINE,
+                        insertcolor=INK, padding=4)
+        style.configure("TCheckbutton", background=CANVAS, foreground=INK,
+                        indicatorcolor=PANEL, font=base)
+        style.map("TCheckbutton",
+                  background=[("active", CANVAS)],
+                  indicatorcolor=[("selected", ACTION)])
+        style.configure("TCombobox", padding=4, arrowcolor=INK,
+                        fieldbackground=PANEL, background=PANEL,
+                        foreground=INK, bordercolor=LINE,
+                        lightcolor=PANEL, darkcolor=PANEL)
+        style.map("TCombobox", fieldbackground=[("readonly", PANEL)])
+        self.option_add("*TCombobox*Listbox.background", PANEL)
+        self.option_add("*TCombobox*Listbox.foreground", INK)
+        self.option_add("*TCombobox*Listbox.selectBackground", ACTION)
+        self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+
+        style.configure("Dark.Vertical.TScrollbar",
+                        background=LINE, troughcolor=CANVAS,
+                        bordercolor=CANVAS, arrowcolor=MUTED,
+                        lightcolor=LINE, darkcolor=LINE, relief="flat")
+        style.map("Dark.Vertical.TScrollbar",
+                  background=[("active", "#475569")])
 
     # ---------------------------------------------------------------- layout
 
@@ -249,32 +499,50 @@ class App(tk.Tk):
         self._build_results(right)
 
         self.status = tk.Label(
-            self, text=TEXT["instructions"], anchor="w", justify="left",
-            bg="#e9eef3", fg=INK, padx=14, pady=9,
-            font=("TkDefaultFont", 9),
+            self, text=self._idle_text(), anchor="w", justify="left",
+            bg=TITLE_BAR, fg=MUTED, padx=16, pady=5 if self.compact else 8,
+            font=(self.ui_font, self.base_pt - 1),
         )
         self.status.pack(fill="x", side="bottom")
 
     def _build_banner(self) -> None:
-        self.banner = tk.Label(self, bg=BAD, fg="white", pady=9,
-                               font=("TkDefaultFont", 11, "bold"))
-        self.banner.pack(fill="x")
+        """The app's own title bar, with the connection badge sitting in it."""
+        bar = tk.Frame(self, bg=TITLE_BAR)
+        bar.pack(fill="x")
+
+        tk.Label(bar, text=TEXT["title"], bg=TITLE_BAR, fg=INK,
+                 font=(self.ui_font, self.base_pt + 4, "bold"),
+                 padx=16, pady=7 if self.compact else 12).pack(side="left")
+        tk.Label(bar, text=__version__, bg=TITLE_BAR, fg=MUTED,
+                 font=(self.ui_font, self.base_pt - 1)).pack(
+            side="left", pady=(6, 0))
+
+        # The badge floats at the right-hand end of the title bar, the way a
+        # notification pill does, rather than being a full-width stripe.
+        self.banner = tk.Label(bar, padx=14, pady=7,
+                               font=(self.ui_font, self.base_pt, "bold"))
+        self.banner.pack(side="right", padx=14, pady=8)
         self._refresh_banner()
 
     def _refresh_banner(self) -> None:
-        """The banner is the one place that says whether the numbers are real."""
+        """The badge is the one place that says whether the numbers are real.
+
+        Simulation is amber rather than red by request. The wording carries the
+        weight instead, because this is the state in which the screen is showing
+        numbers that were never measured.
+        """
         if self.lost:
-            text, bg = TEXT["lost"], BAD
+            text, bg, fg = TEXT["lost"], BAD, "#ffffff"
         elif self.simulated:
             text = TEXT["searching"] if self.watching else TEXT["simulated"]
-            bg = BAD
+            bg, fg = WARN_BADGE, WARN_BADGE_INK
         else:
             text = TEXT["connected"].format(
                 model=self.info.model, serial=self.info.serial,
                 firmware=self.info.firmware, port=self.info.port,
             )
-            bg = GOOD
-        self.banner.configure(text=text, bg=bg)
+            bg, fg = GOOD_BADGE, GOOD_BADGE_INK
+        self.banner.configure(text=text, bg=bg, fg=fg)
 
     def _build_header(self, parent) -> None:
         frame = ttk.Frame(parent)
@@ -311,13 +579,15 @@ class App(tk.Tk):
                                       style="Bad.TLabel", wraplength=330)
 
     def _build_grid(self, parent, title, selection, buttons, nameable) -> None:
-        frame = ttk.LabelFrame(parent, text=title, padding=8,
+        frame = ttk.LabelFrame(parent, text=title, padding=4 if self.compact else 8,
                                style="Card.TLabelframe")
         frame.pack(side="left", fill="y", padx=(0, 8))
 
-        ttk.Label(frame, text=(TEXT["grid_hint_sample"] if nameable
-                               else TEXT["grid_hint_blank"]),
-                  style="CardMuted.TLabel").pack(pady=(0, 6))
+        if not self.tiny:
+            ttk.Label(frame, text=(TEXT["grid_hint_sample"] if nameable
+                                   else TEXT["grid_hint_blank"]),
+                      style="CardMuted.TLabel").pack(
+                pady=(0, 3 if self.compact else 6))
 
         grid = ttk.Frame(frame, style="Card.TFrame")
         grid.pack()
@@ -332,15 +602,19 @@ class App(tk.Tk):
                 row=row_index + 1, column=0, padx=(0, 5))
             for position, column in enumerate(take3.COLUMNS):
                 name = f"{row_letter}{column}"
-                button = tk.Button(
-                    grid, text=name, width=7, bg=EMPTY, fg=INK,
-                    relief="flat", bd=0, highlightthickness=1,
-                    highlightbackground=LINE, highlightcolor=LINE,
-                    activebackground="#e8edf2", padx=0, pady=3,
-                    font=("TkDefaultFont", 9),
+                button = RoundedButton(
+                    grid, text=name, width=72,
+                    height=20 if self.tiny else (22 if self.compact else 28), radius=4,
+                    bg=EMPTY, fg=WELL_INK, outline=WELL_LINE,
+                    hover="#2d3c52", parent_bg=PANEL,
+                    font=("TkDefaultFont", self.base_pt - 1),
                     command=lambda n=name, s=selection, b=buttons: self._toggle(n, s, b),
                 )
-                button.grid(row=row_index + 1, column=position + 1, padx=2, pady=2)
+                # Which green this well turns when it is chosen.
+                button.selected_bg = SAMPLE_WELL if nameable else BLANK_WELL
+                button.selected_fg = SAMPLE_WELL_INK if nameable else BLANK_WELL_INK
+                # 2px between wells: 1px of padding on each facing edge.
+                button.grid(row=row_index + 1, column=position + 1, padx=1, pady=1)
                 if nameable:
                     button.bind("<Double-Button-1>",
                                 lambda _e, n=name: self._name_well(n))
@@ -356,45 +630,70 @@ class App(tk.Tk):
                    command=lambda: self._clear(selection, buttons)).pack(
             side="left", expand=True, fill="x", padx=1)
 
-        if nameable:
+        # On a laptop screen this line is what pushes the buttons off the
+        # bottom. The short status bar says the same thing there.
+        if nameable and not self.compact:
             ttk.Label(frame, text=TEXT["naming_hint"], wraplength=220,
                       style="CardMuted.TLabel").pack(pady=(6, 0))
 
     def _build_buttons(self, parent) -> None:
         frame = ttk.Frame(parent)
-        frame.pack(fill="x", pady=(6, 0))
+        frame.pack(fill="x", pady=(3 if self.compact else 6, 0))
 
         self.blank_label = ttk.Label(frame, text="", style="Bad.TLabel")
         self.blank_label.pack()
         self.batch_label = ttk.Label(frame, text="", style="Muted.TLabel")
-        self.batch_label.pack(pady=(0, 8))
+        self.batch_label.pack(pady=(0, 4 if self.compact else 8))
 
         for key, command in (("read_blank", self._read_blank),
                              ("read_samples", self._read_samples),
                              ("end_batch", self._end_batch)):
-            tk.Button(frame, text=TEXT[key], command=command,
-                      bg=ACTION, fg=ACTION_INK, activebackground="#255a91",
-                      activeforeground=ACTION_INK, relief="flat", bd=0,
-                      pady=11, font=("TkDefaultFont", 10, "bold"),
-                      cursor="hand2").pack(fill="x", pady=3)
+            button = RoundedButton(
+                frame, text=TEXT[key], command=command,
+                height=34 if self.compact else 42, radius=6,
+                bg=ACTION, fg=ACTION_INK, hover=ACTION_HOVER,
+                parent_bg=CANVAS, stretch=True,
+                font=(self.ui_font, self.base_pt + 1, "bold"),
+            )
+            button.pack(fill="x", pady=2 if self.compact else 3)
+            self.action_buttons[key] = button
 
     def _build_results(self, parent) -> None:
         frame = ttk.LabelFrame(parent, text="Resultados", padding=8,
                                style="Card.TLabelframe")
         frame.pack(fill="both", expand=True)
 
+        # A small requested height, not the 26 rows this asked for before. The
+        # table is packed with expand=True so it fills whatever space there is;
+        # asking for 26 rows only forced the window taller than a laptop screen
+        # and pushed the buttons off the bottom.
         self.table = ttk.Treeview(frame, columns=TEXT["columns"],
-                                  show="headings", height=26)
-        for column, width in zip(TEXT["columns"], (120, 95, 75, 75, 65, 330)):
-            self.table.heading(column, text=column)
-            self.table.column(column, width=width, anchor="center")
-        self.table.column(TEXT["columns"][-1], anchor="w")
+                                  show="headings", height=8)
+        # Every column keeps its width except the warnings, which take whatever
+        # is left. Previously they were fixed too, so on a narrow screen the
+        # warning column was the part that fell off the edge.
+        # Measurements are right-aligned so the decimal points line up down the
+        # column and a tenfold difference is visible without reading the digits.
+        numeric = {"Conc.", "260/280", "260/230"}
+        for column, width in zip(TEXT["columns"], (130, 115, 90, 90, 240)):
+            self.table.heading(
+                column, text=column,
+                anchor="e" if column in numeric else "w",
+            )
+            self.table.column(column, width=width,
+                              anchor="e" if column in numeric else "w",
+                              stretch=(column == TEXT["columns"][-1]),
+                              minwidth=60)
+        self.table.column(TEXT["columns"][-1], anchor="w", minwidth=120)
 
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.table.yview)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.table.yview,
+                                  style="Dark.Vertical.TScrollbar")
         self.table.configure(yscrollcommand=scrollbar.set)
         self.table.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        self.table.tag_configure("warn", background=WARN_ROW)
+        self.table.tag_configure("odd", background=ZEBRA)
+        self.table.tag_configure("even", background=PANEL)
+        self.table.tag_configure("warn", background=WARN_ROW, foreground="#fde68a")
 
     # --------------------------------------------------------------- state
 
@@ -402,11 +701,14 @@ class App(tk.Tk):
         button = buttons[name]
         if name in selection:
             selection.discard(name)
-            button.configure(bg=EMPTY, fg=INK, font=("TkDefaultFont", 9))
+            button.configure(bg=EMPTY, fg=WELL_INK, outline=WELL_LINE,
+                             hover="#2d3c52",
+                             font=("TkDefaultFont", self.base_pt - 1))
         else:
             selection.add(name)
-            button.configure(bg=CHOSEN, fg=CHOSEN_INK,
-                             font=("TkDefaultFont", 9, "bold"))
+            button.configure(bg=button.selected_bg, fg=button.selected_fg,
+                             outline=button.selected_bg, hover=None,
+                             font=("TkDefaultFont", self.base_pt - 1, "bold"))
         self._refresh_state()
 
     def _select_all(self, selection, buttons) -> None:
@@ -450,6 +752,16 @@ class App(tk.Tk):
         self._refresh_plate()
         self._say(TEXT["plate_saved"].format(serial=serial))
 
+    def _refresh_table_columns(self) -> None:
+        """Say the unit once, in the heading, and hide 260/230 when it is not read."""
+        self.table.heading(
+            "Conc.",
+            text=TEXT["column_conc"].format(unit=unit_for(self.sample_type.get())),
+        )
+        shown_columns = [c for c in TEXT["columns"]
+                         if c != "260/230" or self.with_230.get()]
+        self.table.configure(displaycolumns=shown_columns)
+
     def _refresh_state(self) -> None:
         wavelengths = wavelengths_for(self.sample_type.get(), self.with_230.get())
         self.wavelength_label.configure(
@@ -470,7 +782,43 @@ class App(tk.Tk):
                                             total=len(self.results))
             if self.results else TEXT["batch_empty"]
         )
+        self._refresh_table_columns()
+        self._refresh_actions()
         self._refresh_plate()
+
+    def _refresh_actions(self) -> None:
+        """Show what to press next, and make the rest unpressable.
+
+        The order is fixed -- blank, samples, save -- so the screen can simply
+        refuse the steps that are not available yet. Stopping the mistake is
+        kinder than explaining it in a dialog after the fact.
+        """
+        if self.blank is None:
+            nxt = "read_blank"
+        elif not self.results:
+            nxt = "read_samples"
+        else:
+            nxt = "end_batch"
+
+        usable = {
+            "read_blank": True,
+            "read_samples": self.blank is not None,
+            "end_batch": bool(self.results),
+        }
+        for key, button in self.action_buttons.items():
+            if not usable[key]:
+                button.configure(state="disabled", bg=ACTION_OFF,
+                                 fg=ACTION_OFF_INK, hover=None, cursor="")
+            else:
+                is_next = key == nxt
+                button.configure(
+                    state="normal", cursor="hand2", fg=ACTION_INK,
+                    bg=ACTION if is_next else ACTION_IDLE,
+                    hover=ACTION_HOVER if is_next else ACTION_IDLE_HOVER,
+                )
+
+    def _idle_text(self) -> str:
+        return TEXT["instructions_short"] if self.compact else TEXT["instructions"]
 
     def _say(self, message: str) -> None:
         self.status.configure(text=message)
@@ -601,7 +949,7 @@ class App(tk.Tk):
         except (ReaderError, NotImplementedError, OSError) as exc:
             self._mark_lost()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
-            self._say(TEXT["instructions"])
+            self._say(self._idle_text())
             return
 
         for warning in check_blanks(self.blank):
@@ -625,7 +973,7 @@ class App(tk.Tk):
         except (ReaderError, NotImplementedError, OSError) as exc:
             self._mark_lost()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
-            self._say(TEXT["instructions"])
+            self._say(self._idle_text())
             return
 
         sample_type = self.sample_type.get()
@@ -654,17 +1002,18 @@ class App(tk.Tk):
         def shown(value, digits):
             return f"{value:.{digits}f}" if value is not None else "-"
 
-        for read_number, result in self.results:
+        for index, (read_number, result) in enumerate(self.results):
             note = "; ".join(w.short for w in result.warnings)
             label = self.sample_names.get(result.well, result.well)
+            stripe = "odd" if index % 2 else "even"
             self.table.insert(
                 "", "end",
                 values=(f"{read_number}:{label}",
                         shown(result.concentration, 1),
                         shown(result.ratio_260_280, 2),
                         shown(result.ratio_260_230, 2),
-                        result.unit, note),
-                tags=("warn",) if note else (),
+                        note),
+                tags=("warn",) if note else (stripe,),
             )
 
     def _end_batch(self) -> None:

@@ -227,6 +227,15 @@ def pathlength_for(
     return value
 
 
+def unit_for(sample_type: str) -> str:
+    """What a concentration of this sample type is measured in.
+
+    The screen needs this before anything has been read, to label the column.
+    Defined once here so the heading can never disagree with the number under it.
+    """
+    return "mg/mL" if sample_type == "protein" else "ng/uL"
+
+
 def to_1cm(absorbance: float, pathlength_mm: float = DEFAULT_PATHLENGTH_MM) -> float:
     """Scale a Take3 absorbance to what a 1 cm cuvette would have shown."""
     return absorbance / (pathlength_mm / 10.0)
@@ -266,10 +275,9 @@ def quantify(
 
     if sample_type == "protein":
         concentration = to_1cm(a260, path_mm) * PROTEIN_FACTOR_MG_ML
-        unit = "mg/mL"
     else:
         concentration = to_1cm(a260, path_mm) * EXTINCTION[sample_type]
-        unit = "ng/uL"
+    unit = unit_for(sample_type)
 
     ratio_280 = _ratio(a260, corrected(280)) if 280 in sample.readings else None
     ratio_230 = _ratio(a260, a230) if a230 is not None else None

@@ -87,12 +87,12 @@ spreadsheet can be reviewed before the instrument is talking:
 
     python3 run_gui.py
 
-It opens with a red banner saying the numbers are simulated, and any file it saves
-carries the same warning inside. Needs tkinter (bundled with Python on Windows; on
-Debian/Ubuntu `apt install python3-tk`).
+It opens with an amber badge in the title bar saying the numbers are simulated, and
+any file it saves carries the same warning inside. Needs tkinter (bundled with
+Python on Windows; on Debian/Ubuntu `apt install python3-tk`).
 
 The order you switch things on does not matter. If the reader is not there at
-startup the program keeps looking for it every few seconds and turns the banner
+startup the program keeps looking for it every few seconds and turns the badge
 green by itself once it answers, so there is no need to restart it. Simulated
 readings are never folded into a real batch: if any are already on screen when the
 instrument appears, it asks first and discards them. If the reader stops answering
