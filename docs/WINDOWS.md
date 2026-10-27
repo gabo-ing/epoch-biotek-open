@@ -18,7 +18,13 @@ instrument's serial number, so the COM number never has to be typed anywhere.
 
 Linux needs nothing: `ftdi_sio` is in the kernel.
 
-## 2. Build the exe (on the Windows machine, once)
+## 2. Getting the source onto the machine
+
+Git is not needed. On GitHub, use **Code -> Download ZIP** and unpack it somewhere
+that is not the Downloads folder. Check which branch you are downloading: the ZIP
+button gives you whichever branch the page is showing.
+
+## 3. Build the exe (on the Windows machine, once)
 
 Install Python 3.11 or newer from python.org, ticking **"Add python.exe to PATH"**.
 The python.org build includes tkinter; the Microsoft Store build has been known not
@@ -33,17 +39,22 @@ to, so avoid it.
 The only third-party dependency is **pyserial**. The xlsx writer is deliberately
 hand-rolled against the standard library, so nothing else has to be bundled.
 
-## 3. Check before handing it over
+## 4. Check before handing it over
 
 1. Run the exe with **no reader attached**. It must open, show the red simulator
    banner, and let a fake read be taken and saved. If it crashes here, it will crash
    in front of the technician.
 2. Open a saved file in the lab's own Excel — not just LibreOffice.
-3. With the reader attached, confirm it is found automatically and reports serial
-   254717 and firmware 1.12.
-4. Run the paired validation in `docs/WISHLIST.md` before it is used for real results.
+3. With the exe still running, switch the reader on. Within a few seconds the banner
+   must turn green by itself and report serial 254717 and firmware 1.12, with no
+   restart. This is the check that matters most, because it is the order the
+   technician will actually do things in.
+4. Switch the reader off again while the program is open and take a read. It must
+   say the reader is not answering. If it silently produces numbers instead, stop
+   and do not hand it over: those numbers are simulated.
+5. Run the paired validation in `docs/WISHLIST.md` before it is used for real results.
 
-## 4. Where it lives
+## 5. Where it lives
 
 Put the exe somewhere stable (`C:\EpochTake3\`) and make a Desktop shortcut. Do not
 run it from a USB stick or the Downloads folder, where it will eventually be deleted
@@ -55,6 +66,10 @@ Built and run on the lab's Dell with Windows 11 on 26 October 2026. Confirmed:
 started with no reader attached and showed the red simulation banner; closed,
 attached the reader, restarted and the reader was detected; read a plate; exported
 an xlsx that Excel opened with no repair prompt.
+
+That build is now out of date. It predates the config file, the plate dialog, the
+version stamping and the automatic reader detection, so it still needs the restart
+described above. Rebuild from current source rather than copying that exe.
 
 `build_windows.bat` in the project root does the whole build.
 
