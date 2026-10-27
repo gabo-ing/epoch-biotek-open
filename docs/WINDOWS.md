@@ -77,6 +77,19 @@ described above. Rebuild from current source rather than copying that exe.
 
 `build_windows.bat` in the project root does the whole build.
 
+## Display scaling
+
+The program declares itself DPI-aware, so Windows draws it at the screen's real
+pixel size instead of rendering it at 96 dpi and stretching the result. Without
+that the text is visibly blurry on any laptop running at 125% or 150%, which is
+the default on most current machines.
+
+The layout scales itself to match, and tightens as the usable space shrinks. It
+fits a 1920x1080 screen at 100%, 125% and 150%. It does not fit a 1366x768 screen
+above 100%: at 150% the layout needs about 760 pixels of height on a 768-pixel
+screen, which no amount of tightening will fix. On such a machine set Windows
+display scaling to 100%.
+
 ## Known gaps
 - Windows may warn about an unsigned executable on first run ("Windows protected your
   PC" -> More info -> Run anyway). Expected for an unsigned binary; it does not

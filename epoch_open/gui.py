@@ -384,9 +384,20 @@ class App(tk.Tk):
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
 
-        width = min(1180, screen_w - 80)
-        height = min(980, screen_h - 70)
-        self.minsize(min(900, width), min(600, height))
+        # How many real pixels the system puts in an inch. 96 is 100%; a laptop
+        # at 150% reports 144. Points are handled by Tk once it is told the
+        # scaling, but every hand-written pixel size has to be multiplied.
+        dpi = self.winfo_fpixels("1i")
+        self.scale = max(1.0, dpi / 96.0)
+        self.tk.call("tk", "scaling", dpi / 72.0)
+
+        # Decide the layout against logical space, not raw pixels: a 1920x1080
+        # screen at 150% has the usable room of a 1280x720 one.
+        logical_h = screen_h / self.scale
+
+        width = min(self.px(1180), screen_w - self.px(80))
+        height = min(self.px(980), screen_h - self.px(58))
+        self.minsize(min(self.px(900), width), min(self.px(600), height))
 
         x = max(0, (screen_w - width) // 2)
         y = max(0, (screen_h - height) // 3)
@@ -394,10 +405,14 @@ class App(tk.Tk):
 
         # Readable at arm's length on a roomy screen, but a cramped laptop needs
         # the space more than it needs the extra point.
-        self.tiny = screen_h < 760
-        self.compact = screen_h < 1000
+        self.tiny = logical_h < 760
+        self.compact = logical_h < 1000
         self.base_pt = 10 if self.compact else 11
         self.ui_font = self._pick_font()
+
+    def px(self, logical: int) -> int:
+        """A hand-written pixel size, in this screen's real pixels."""
+        return int(round(logical * getattr(self, "scale", 1.0)))
 
     def _pick_font(self) -> str:
         """The platform's own interface face, falling back to Tk's default.
@@ -537,7 +552,9 @@ class App(tk.Tk):
 
         tk.Label(bar, text=TEXT["title"], bg=TITLE_BAR, fg=TITLE_INK,
                  font=(self.ui_font, self.base_pt + 4, "bold"),
-                 padx=16, pady=7 if self.compact else 12).pack(side="left")
+                 padx=16,
+                 pady=4 if self.tiny else (7 if self.compact else 12),
+                 ).pack(side="left")
         tk.Label(bar, text=__version__, bg=TITLE_BAR, fg=TITLE_MUTED,
                  font=(self.ui_font, self.base_pt - 1)).pack(
             side="left", pady=(6, 0))
@@ -631,8 +648,10 @@ class App(tk.Tk):
             for position, column in enumerate(take3.COLUMNS):
                 name = f"{row_letter}{column}"
                 button = RoundedButton(
-                    grid, text=name, width=72,
-                    height=20 if self.tiny else (22 if self.compact else 28), radius=4,
+                    grid, text=name, width=self.px(72),
+                    height=self.px(20 if self.tiny else
+                                   (22 if self.compact else 28)),
+                    radius=self.px(4),
                     bg=EMPTY, fg=WELL_INK, outline=WELL_LINE,
                     hover=WELL_HOVER, parent_bg=PANEL,
                     font=("TkDefaultFont", self.base_pt - 1),
@@ -661,7 +680,7 @@ class App(tk.Tk):
         # On a laptop screen this line is what pushes the buttons off the
         # bottom. The short status bar says the same thing there.
         if nameable and not self.compact:
-            ttk.Label(frame, text=TEXT["naming_hint"], wraplength=220,
+            ttk.Label(frame, text=TEXT["naming_hint"], wraplength=self.px(220),
                       style="CardMuted.TLabel").pack(pady=(6, 0))
 
     def _build_buttons(self, parent) -> None:
@@ -678,7 +697,8 @@ class App(tk.Tk):
                              ("end_batch", self._end_batch)):
             button = RoundedButton(
                 frame, text=TEXT[key], command=command,
-                height=34 if self.compact else 42, radius=6,
+                height=self.px(30 if self.tiny else (34 if self.compact else 42)),
+                radius=self.px(6),
                 bg=ACTION, fg=ACTION_INK, hover=ACTION_HOVER,
                 parent_bg=CANVAS, stretch=True,
                 font=(self.ui_font, self.base_pt + 1, "bold"),
@@ -703,7 +723,8 @@ class App(tk.Tk):
         # Measurements are right-aligned so the decimal points line up down the
         # column and a tenfold difference is visible without reading the digits.
         numeric = {"Conc.", "260/280", "260/230"}
-        for column, width in zip(TEXT["columns"], (130, 115, 90, 90, 240)):
+        for column, width in zip(TEXT["columns"],
+                                 [self.px(w) for w in (130, 115, 90, 90, 240)]):
             self.table.heading(
                 column, text=column,
                 anchor="e" if column in numeric else "w",
@@ -711,8 +732,8 @@ class App(tk.Tk):
             self.table.column(column, width=width,
                               anchor="e" if column in numeric else "w",
                               stretch=(column == TEXT["columns"][-1]),
-                              minwidth=60)
-        self.table.column(TEXT["columns"][-1], anchor="w", minwidth=120)
+                              minwidth=self.px(60))
+        self.table.column(TEXT["columns"][-1], anchor="w", minwidth=self.px(120))
 
         scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.table.yview,
                                   style="Dark.Vertical.TScrollbar")
@@ -1266,6 +1287,33 @@ class PlateDialog(tk.Toplevel):
         self.destroy()
 
 
+def enable_dpi_awareness() -> None:
+    """Stop Windows bitmap-stretching the window, which blurs every glyph.
+
+    A process that does not declare itself DPI-aware is rendered at 96 dpi and
+    then scaled up by the compositor, so on a laptop running at 125% or 150%
+    the text is visibly soft. Declaring awareness means Tk draws at the real
+    pixel size and the glyphs stay sharp; the layout then has to do its own
+    scaling, which is what App.scale is for.
+
+    Must be called before the first Tk window exists. A no-op anywhere but
+    Windows, and harmless if the call is unavailable.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        try:
+            # Per-monitor aware: correct when the laptop is docked to a second
+            # screen at a different scaling.
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:          # pragma: no cover - older Windows
+        pass
+
+
 def connect_backend(force_simulator: bool = False):
     """The real instrument, or None when it does not answer.
 
@@ -1293,6 +1341,7 @@ def connect_backend(force_simulator: bool = False):
 
 def main() -> int:
     force = "--sim" in sys.argv or os.environ.get("EPOCH_GUI_SIM") == "1"
+    enable_dpi_awareness()          # before any Tk window exists
     App(connect_backend(force), watch=not force).mainloop()
     return 0
 
