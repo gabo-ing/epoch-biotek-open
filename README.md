@@ -207,6 +207,11 @@ A lab that finds them too strict or too slack can move them without a rebuild.
 If they ever turn out to redden wells on blanks that are genuinely fine, that is
 the file to edit, and worth telling us about.
 
+`docs/BLANK_THRESHOLD.md` is the bench procedure that would replace this guess
+with a measurement: a dilution series spiked into one blank well, run through
+Gen5 until it refuses, which brackets the threshold Gen5 actually enforces. It
+needs a machine that still has the Gen5 trial. It has not been run yet.
+
 The CV% is computed the way Gen5 reports it, on the raw absorbances per
 wavelength, because that is the number the technician is used to reading. It is
 *not* what the program gates on -- the spread above is -- and it will not match
