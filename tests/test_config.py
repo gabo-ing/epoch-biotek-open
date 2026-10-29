@@ -157,3 +157,75 @@ class TestPlatesAreKeptPerSerial:
         p = self.path("legacy.json")
         p.write_text(json.dumps({"plate_serial": "777", "pathlengths_mm": {"A2": 0.5}}))
         assert config.load(p).pathlengths["A2"] == 0.5
+
+
+class TestBlankLimits:
+    """The two thresholds the blanking verdict uses, which labs may move.
+
+    They are this project's own numbers rather than anything recovered from
+    Gen5, so they have to be reachable without a rebuild -- which means the
+    config file has to carry them, survive a save, and refuse nonsense.
+    """
+
+    def path(self, name):
+        directory = Path(__file__).resolve().parent / "_out"
+        directory.mkdir(exist_ok=True)
+        p = directory / name
+        if p.exists():
+            p.unlink()
+        return p
+
+    def test_the_defaults_are_the_ones_the_quant_module_decided(self):
+        from epoch_open import quant
+
+        cfg = config.Config()
+        assert cfg.blank_spread_limit_au == quant.BLANK_SPREAD_LIMIT_AU
+        assert cfg.blank_divergence_limit_au == quant.BLANK_DIVERGENCE_LIMIT_AU
+
+    def test_a_lab_can_loosen_them_in_the_file(self):
+        p = self.path("limits.json")
+        p.write_text(json.dumps({"blank_spread_limit_au": 0.010,
+                                 "blank_divergence_limit_au": 0.008}))
+        cfg = config.load(p)
+        assert cfg.blank_spread_limit_au == 0.010
+        assert cfg.blank_divergence_limit_au == 0.008
+
+    def test_they_survive_a_save(self):
+        """Registering a plate must not quietly reset them to the defaults."""
+        p = self.path("limits-roundtrip.json")
+        p.write_text(json.dumps({"blank_spread_limit_au": 0.010,
+                                 "blank_divergence_limit_au": 0.008}))
+        cfg = config.load(p)
+        cfg.set_plate("243819", {"A2": 0.5})
+        config.save(cfg, p)
+
+        reloaded = config.load(p)
+        assert reloaded.blank_spread_limit_au == 0.010
+        assert reloaded.blank_divergence_limit_au == 0.008
+
+    def test_a_limit_of_zero_is_ignored_rather_than_obeyed(self):
+        """Zero would reject every blank ever read, including perfect ones."""
+        p = self.path("zero.json")
+        p.write_text(json.dumps({"blank_spread_limit_au": 0,
+                                 "blank_divergence_limit_au": -1}))
+        cfg = config.load(p)
+        assert cfg.blank_spread_limit_au > 0
+        assert cfg.blank_divergence_limit_au > 0
+
+    def test_rubbish_falls_back_instead_of_stopping_the_program(self):
+        p = self.path("rubbish.json")
+        p.write_text(json.dumps({"blank_spread_limit_au": "mucho"}))
+        from epoch_open import quant
+
+        assert config.load(p).blank_spread_limit_au \
+            == quant.BLANK_SPREAD_LIMIT_AU
+
+    def test_the_example_file_matches_the_built_in_defaults(self):
+        """A shipped example that disagrees with the code teaches a wrong number."""
+        from epoch_open import quant
+
+        root = Path(__file__).resolve().parent.parent
+        example = json.loads((root / "epoch_open.example.json").read_text())
+        assert example["blank_spread_limit_au"] == quant.BLANK_SPREAD_LIMIT_AU
+        assert example["blank_divergence_limit_au"] \
+            == quant.BLANK_DIVERGENCE_LIMIT_AU

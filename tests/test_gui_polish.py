@@ -35,6 +35,30 @@ def _state(app, key):
     return str(app.action_buttons[key].cget("state"))
 
 
+def _blank(app, wells=("A2", "A3"), spread=0.0):
+    """Install a blanking that really happened, as a read would install it.
+
+    The app derives the blank in force, and its verdict, from the readings it
+    took and the wells still marked, so a test cannot just assign `app.blank`.
+    Identical readings make a blank that passes; `spread` pulls one well away
+    to make one that does not.
+    """
+    from datetime import datetime
+
+    from epoch_open.quant import RawWell
+
+    app.blank_raw = {}
+    for offset, well in enumerate(wells):
+        app.blank_raw[well] = RawWell(
+            well=well,
+            readings={260: 0.046 + (spread if offset else 0.0),
+                      280: 0.044, 320: 0.041},
+        )
+    app.blank_selected.update(wells)
+    app.blank_time = datetime.now()
+    app._refresh_state()
+
+
 class TestTheNextStepIsObvious:
     def test_only_the_blank_can_be_read_first(self):
         app = _app()
@@ -54,8 +78,7 @@ class TestTheNextStepIsObvious:
         if app is None:
             return
         try:
-            app.blank = {"A2": object()}
-            app._refresh_actions()
+            _blank(app)
             assert _state(app, "read_samples") == "normal"
             assert app.action_buttons["read_samples"].cget("bg") == gui.ACTION
             # Nothing has been measured, so there is nothing to save.
@@ -68,7 +91,7 @@ class TestTheNextStepIsObvious:
         if app is None:
             return
         try:
-            app.blank = {"A2": object()}
+            _blank(app)
             app.results = [(1, object())]
             app._refresh_actions()
             assert _state(app, "end_batch") == "normal"

@@ -16,5 +16,11 @@
       "G2": 0.4988, "G3": 0.4973,
       "H2": 0.4980, "H3": 0.4982
     }
-  }
+  },
+
+  "_blank_comment": "How strictly the blank wells are judged, in absorbance units, after the 320 nm correction. These are this project's own limits, not Gen5's: see 'Where the two limits come from' in the README. Raise them if good blanks are being reddened.",
+
+  "blank_spread_limit_au": 0.004,
+
+  "blank_divergence_limit_au": 0.003
 }

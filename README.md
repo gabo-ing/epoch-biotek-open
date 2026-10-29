@@ -33,7 +33,8 @@ design more than anything technical does:
 | Take3 layout (`epoch_open/take3.py`) | Done, confirmed from the factory sheet (A2-H3) |
 | Reader interface + simulator (`epoch_open/reader.py`) | Done |
 | Technician GUI (`epoch_open/gui.py`) | Working against the real instrument |
-| Test suite | 155 tests passing |
+| Blank validation | Done -- per-well verdict, CV%, discard and reset |
+| Test suite | 250 tests passing |
 | Protocol capture procedure (`docs/CAPTURE.md`) | No longer needed |
 | Serial protocol decode | **Done** — reads confirmed on the instrument |
 | USB transport | **Solved** — reader is FTDI virtual COM, pyserial talks to it (`docs/FINDINGS.md`) |
@@ -149,6 +150,70 @@ screen, the layout tightening by itself for the shorter usable height
 (`docs/img/gui-macos.png`). What has **not** been tried is a Mac talking to an
 actual Epoch, and `build_macos.sh` has never been run, so the `.app` route is
 still unverified.
+
+## Blanking
+
+The blank is its own step with its own verdict, the way the technician works at
+the bench: mark the water spots, read them, look at the grid, and only then
+quantify.
+
+![The blank grid with one bad spot](docs/img/blanking-invalid.png)
+
+Each blank well shows one of four things:
+
+| | |
+|---|---|
+| white | not part of the blank |
+| **blue** | marked, not read yet |
+| **green** | read, and it agrees with the others |
+| **red** | read, and it does not agree -- this is the spot to wipe |
+
+Beside the grid are the four fields Gen5 prints: date, time, `VALIDO` /
+`NO VALIDO`, and the CV%. **Samples cannot be read while the blank is not
+valid** -- the button is disabled rather than failing afterwards.
+
+There are two ways out of a bad blank, and the line under the grids says which
+one applies:
+
+- **One well is red.** Click it to discard it. The blank is recomputed from the
+  rest without re-reading anything, and clicking again puts it back.
+- **Nothing is red but the wells still disagree.** No single well can be blamed,
+  so there is nothing to discard: wipe the plate and blank again. `Reiniciar`
+  throws away the readings *and* the marks, which is what Gen5 calls Reset
+  Blanks.
+
+Marking a new well after a read suspends the blank until it is read too: half a
+blank, part measured and part not, must never be subtracted from anybody's
+samples.
+
+### Where the two limits come from
+
+A blank fails if any single well sits more than **0.003 AU** from the median of
+the others, or if the wells together span more than **0.004 AU**. Both are
+measured after the 320 nm correction, because what gets subtracted from every
+sample is the difference, not the raw reading.
+
+**These two numbers are this project's own, not Gen5's.** Gen5 shows a verdict
+but never says what it tests, and we have no export of a blanking run it
+rejected, so there was nothing to reverse-engineer. They are set from the one
+run we know Gen5 *passed* -- the eight wells of `Gen5_LVA_NAQ_0001`, which span
+0.002 AU with the worst well 0.0015 AU from the median -- so a blank that good
+keeps about twice the room it actually needed. Both are in `epoch_open.json`:
+
+    "blank_spread_limit_au": 0.004,
+    "blank_divergence_limit_au": 0.003
+
+A lab that finds them too strict or too slack can move them without a rebuild.
+If they ever turn out to redden wells on blanks that are genuinely fine, that is
+the file to edit, and worth telling us about.
+
+The CV% is computed the way Gen5 reports it, on the raw absorbances per
+wavelength, because that is the number the technician is used to reading. It is
+*not* what the program gates on -- the spread above is -- and it will not match
+Gen5 to the last digit: the exported absorbances are rounded to three decimals,
+which on a ~0.045 blank moves a recomputed CV by more than the gap between the
+two standard-deviation conventions, so the file cannot even say which one Gen5
+used. Expect agreement to a few tenths of a percentage point.
 
 ## Running it today
 

@@ -10,7 +10,9 @@ executable, and every field is optional.
       "plates": {
         "243819": {"A2": 0.5125, "A3": 0.5096},
         "999001": {"A2": 0.5044, "A3": 0.5071}
-      }
+      },
+      "blank_spread_limit_au": 0.004,
+      "blank_divergence_limit_au": 0.002
     }
 
 reader_serial   null (the default) accepts whichever Epoch answers. Set it only
@@ -19,6 +21,19 @@ reader_serial   null (the default) accepts whichever Epoch answers. Set it only
 plate_serial    which Take3 is in use now.
 plates          every plate the lab has registered, keyed by serial, each with
                 the values from its own Take3 Pathlength Data Sheet.
+blank_spread_limit_au
+                how far apart the blank wells may read, in absorbance units,
+                before the blanking is called invalid and the samples cannot be
+                read. Default 0.004.
+blank_divergence_limit_au
+                how far one blank well may sit from the middle of the others
+                before it is painted red as the one to wipe. Default half the
+                spread limit.
+
+Those two limits are this project's own, not numbers recovered from Gen5: we have
+no export of a blanking run Gen5 rejected, so there was nothing to measure them
+from. They are here so a lab that finds them too strict or too slack can move them
+without a rebuild.
 
 Keeping a table per serial matters. An earlier version stored a single table, so
 registering a replacement plate and later switching back to the first one kept
@@ -33,6 +48,8 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from . import quant
 
 CONFIG_NAME = "epoch_open.json"
 
@@ -49,6 +66,8 @@ class Config:
     reader_serial: str | None = None
     plate_serial: str = "243819"
     plates: dict[str, dict[str, float]] = field(default_factory=dict)
+    blank_spread_limit_au: float = quant.BLANK_SPREAD_LIMIT_AU
+    blank_divergence_limit_au: float = quant.BLANK_DIVERGENCE_LIMIT_AU
     source: str = "defaults"
 
     def pathlengths_for(self, serial: str | None) -> dict[str, float] | None:
@@ -95,6 +114,8 @@ def save(cfg: Config, path: Path | None = None) -> Path:
             serial: {k: round(float(v), 4) for k, v in sorted(table.items())}
             for serial, table in sorted(cfg.plates.items())
         },
+        "blank_spread_limit_au": cfg.blank_spread_limit_au,
+        "blank_divergence_limit_au": cfg.blank_divergence_limit_au,
     }
     temp = path.with_suffix(".json.tmp")
     temp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
@@ -144,9 +165,21 @@ def load(path: Path | None = None) -> Config:
     if legacy and plate not in plates:
         plates[plate] = legacy
 
+    def positive(key: str, fallback: float) -> float:
+        """A limit of zero or less would reject every blank; ignore it."""
+        try:
+            value = float(data[key])
+        except (KeyError, TypeError, ValueError):
+            return fallback
+        return value if value > 0 else fallback
+
     return Config(
         reader_serial=str(serial) if serial else None,
         plate_serial=plate,
         plates=plates,
+        blank_spread_limit_au=positive("blank_spread_limit_au",
+                                       quant.BLANK_SPREAD_LIMIT_AU),
+        blank_divergence_limit_au=positive("blank_divergence_limit_au",
+                                           quant.BLANK_DIVERGENCE_LIMIT_AU),
         source=str(path),
     )

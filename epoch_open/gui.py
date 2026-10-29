@@ -18,7 +18,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__, config, take3
-from .quant import (QuantError, blank_for, check_blanks, quantify, unit_for,
+from .quant import (QuantError, blank_for, blank_report, quantify, unit_for,
                     wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import export_results
@@ -45,6 +45,7 @@ TEXT = {
     "read_samples": "2.  Leer muestras",
     "end_batch": "3.  Fin del lote  (guardar Excel)",
     "clear_blank": "Limpiar",
+    "reset_blanks": "Reiniciar",
     "clear_samples": "Limpiar",
     "all_samples": "Todos",
     "wavelengths": "Longitudes de onda: {list}",
@@ -72,6 +73,23 @@ TEXT = {
                          "o elige 'Usar 0,5 mm nominal'."),
     "plate_known": "Esta placa ya estaba registrada; se muestran sus valores.",
     "blank_pending": "Falta leer el blanco",
+    "blank_state_unread": "SIN LEER",
+    "blank_state_valid": "VALIDO",
+    "blank_state_invalid": "NO VALIDO",
+    "blank_field_date": "Fecha:",
+    "blank_field_time": "Hora:",
+    "blank_field_state": "Estado:",
+    "blank_field_cv": "CV%:",
+    "blank_why_divergent": ("Hay pozos de blanco que no concuerdan con el resto "
+                            "(en rojo). Descartalos, o limpia todo y vuelve a "
+                            "blanquear."),
+    "blank_why_spread": ("Los pozos del blanco no concuerdan entre si. Limpia la "
+                         "placa y vuelve a blanquear."),
+    "blank_why_pending": "Faltan pozos por leer (en azul).",
+    "blank_why_empty": "No queda ningun pozo de blanco.",
+    "blank_not_valid": ("El blanco no es valido todavia. Arreglalo antes de leer "
+                        "las muestras:\n\n{reason}"),
+    "blank_invalid_say": "Blanco NO valido. {reason}",
     "blank_done": "Blanco leido: {wells}",
     "batch_empty": "Lote vacio",
     "batch_state": "Lote: {reads} lecturas, {total} muestras",
@@ -277,7 +295,17 @@ GOOD_BADGE_INK = "#ffffff"
 WELL_LINE       = "#9db8d8"   # pale blue outline, unselected
 WELL_INK        = "#33414f"
 WELL_HOVER      = "#eaf2fb"
-BLANK_WELL      = "#cfe8d6"   # soft green, dark text
+BLANK_WELL      = "#cfe8d6"   # soft green, dark text: read and good
+# A blank well goes through three states and each needs its own colour, because
+# the technician works by scanning the grid rather than by reading the status
+# block: marked but not yet read is pale blue, a valid reading is the soft green
+# above, and one that does not agree with the rest is red, meaning "this is the
+# spot to wipe". Gen5 does the same thing with coloured dots.
+BLANK_PENDING     = "#cfe0f5"   # pale blue, chosen, nothing measured yet
+BLANK_PENDING_INK = "#1d3a5f"
+BAD_WELL          = "#f6cfcf"   # soft red fill, dark red text
+BAD_WELL_INK      = "#7f1d1d"
+BAD_WELL_LINE     = "#d98a8a"
 BLANK_WELL_INK  = "#14532d"
 SAMPLE_WELL     = "#43a047"   # solid green
 SAMPLE_WELL_INK = "#ffffff"
@@ -351,6 +379,13 @@ class App(tk.Tk):
         self.plate_serial = CONFIG.plate_serial
         self.pathlengths = CONFIG.pathlengths
 
+        # `blank_raw` is every well the last blanking actually measured;
+        # `blank_selected` is which of those still count. Discarding a bad well
+        # takes it out of the second without losing the reading, so it can be
+        # put back without re-reading the plate.
+        self.blank_raw: dict | None = None
+        self.blank_time: datetime | None = None
+        self.blank_report = None
         self.blank: dict | None = None
         self.results: list = []          # (read_number, QuantResult)
         self.read_number = 0
@@ -453,6 +488,8 @@ class App(tk.Tk):
                         foreground=MUTED, font=(family, pt, "bold"))
         style.configure("Card.TFrame", background=PANEL)
         style.configure("Card.TLabel", background=PANEL, foreground=INK)
+        style.configure("CardGood.TLabel", background=PANEL, foreground=GOOD)
+        style.configure("CardBad.TLabel", background=PANEL, foreground=BAD)
         style.configure("CardMuted.TLabel", background=PANEL, foreground=MUTED,
                         font=(family, pt - 1))
 
@@ -667,21 +704,55 @@ class App(tk.Tk):
                                 lambda _e, n=name: self._name_well(n))
                 buttons[name] = button
 
+        if not nameable:
+            self._build_blank_status(frame)
+
         controls = ttk.Frame(frame, style="Card.TFrame")
         controls.pack(fill="x", pady=(8, 0))
         if nameable:
             ttk.Button(controls, text=TEXT["all_samples"],
                        command=lambda: self._select_all(selection, buttons)).pack(
                 side="left", expand=True, fill="x", padx=1)
-        ttk.Button(controls, text=TEXT["clear_blank"],
-                   command=lambda: self._clear(selection, buttons)).pack(
-            side="left", expand=True, fill="x", padx=1)
+            ttk.Button(controls, text=TEXT["clear_blank"],
+                       command=lambda: self._clear(selection, buttons)).pack(
+                side="left", expand=True, fill="x", padx=1)
+        else:
+            # Gen5 calls this "Reset Blanks", and it throws away the readings as
+            # well as the selection. Clearing only the marks would leave the old
+            # blank still being subtracted from the next samples.
+            ttk.Button(controls, text=TEXT["reset_blanks"],
+                       command=self._reset_blanks).pack(
+                side="left", expand=True, fill="x", padx=1)
 
         # On a laptop screen this line is what pushes the buttons off the
         # bottom. The short status bar says the same thing there.
         if nameable and not self.compact:
             ttk.Label(frame, text=TEXT["naming_hint"], wraplength=self.px(220),
                       style="CardMuted.TLabel").pack(pady=(6, 0))
+
+    def _build_blank_status(self, parent) -> None:
+        """Date, time, verdict and CV of the last blanking.
+
+        The same four fields Gen5 prints beside its blanking grid, in the same
+        order, because that is what the technician already checks before she
+        trusts a blank. It sits under the grid rather than beside it only
+        because this column is narrow.
+        """
+        box = ttk.Frame(parent, style="Card.TFrame")
+        box.pack(fill="x", pady=(6, 0))
+
+        self.blank_fields: dict[str, ttk.Label] = {}
+        fields = (("date", TEXT["blank_field_date"]),
+                  ("time", TEXT["blank_field_time"]),
+                  ("state", TEXT["blank_field_state"]),
+                  ("cv", TEXT["blank_field_cv"]))
+        for row, (key, label) in enumerate(fields):
+            ttk.Label(box, text=label, style="CardMuted.TLabel").grid(
+                row=row, column=0, sticky="w")
+            value = ttk.Label(box, text="-", style="Card.TLabel")
+            value.grid(row=row, column=1, sticky="w", padx=(6, 0))
+            self.blank_fields[key] = value
+
 
     def _build_buttons(self, parent) -> None:
         frame = ttk.Frame(parent)
@@ -769,6 +840,123 @@ class App(tk.Tk):
         for name in list(selection):
             self._toggle(name, selection, buttons)
 
+    def _blank_pending_wells(self) -> set[str]:
+        """Wells marked for the blank that the last blanking did not measure.
+
+        Marking a well after reading leaves the blank half measured. That must
+        not count as a blank: the samples would be corrected with a mixture of
+        the wells that were read and nothing at all for the rest.
+        """
+        if self.blank_raw is None:
+            return set()
+        return self.blank_selected - set(self.blank_raw)
+
+    def _rebuild_blank(self) -> None:
+        """Work out the blank in force, and judge it, from the current marks."""
+        if self.blank_raw is None:
+            self.blank, self.blank_report = None, None
+            return
+
+        kept = {well: reading for well, reading in self.blank_raw.items()
+                if well in self.blank_selected}
+        self.blank = kept or None
+        self.blank_report = blank_report(
+            kept,
+            CONFIG.blank_spread_limit_au,
+            CONFIG.blank_divergence_limit_au,
+        ) if kept else None
+
+    def _blank_ok(self) -> bool:
+        """Whether samples may be read against this blank."""
+        return (self.blank_raw is not None
+                and not self._blank_pending_wells()
+                and self.blank_report is not None
+                and self.blank_report.valid)
+
+    def _blank_reason(self) -> str:
+        """Why the blank is not usable, in words she can act on."""
+        if self._blank_pending_wells():
+            return TEXT["blank_why_pending"]
+        if self.blank_report is None:
+            return TEXT["blank_why_empty"]
+        return {
+            "divergent": TEXT["blank_why_divergent"],
+            "spread": TEXT["blank_why_spread"],
+            "empty": TEXT["blank_why_empty"],
+        }.get(self.blank_report.reason, "")
+
+    def _blank_well_style(self, name: str):
+        """How one well of the blank grid should look: (bg, fg, outline, hover)."""
+        if name not in self.blank_selected:
+            return EMPTY, WELL_INK, WELL_LINE, WELL_HOVER
+        if self.blank_raw is None or name not in self.blank_raw:
+            return BLANK_PENDING, BLANK_PENDING_INK, BLANK_PENDING, None
+        if self.blank_report and name in self.blank_report.divergent:
+            return BAD_WELL, BAD_WELL_INK, BAD_WELL_LINE, None
+        return BLANK_WELL, BLANK_WELL_INK, BLANK_WELL, None
+
+    def _refresh_blank_wells(self) -> None:
+        for name, button in self.blank_buttons.items():
+            bg, fg, outline, hover = self._blank_well_style(name)
+            marked = name in self.blank_selected
+            button.configure(
+                bg=bg, fg=fg, outline=outline, hover=hover,
+                font=("TkDefaultFont", self.base_pt - 1, "bold") if marked
+                else ("TkDefaultFont", self.base_pt - 1),
+            )
+
+    def _refresh_blank_display(self) -> None:
+        """Repaint the blank grid and the four status fields beside it."""
+        self._refresh_blank_wells()
+
+        if self.blank_raw is None:
+            for key in ("date", "time", "cv"):
+                self.blank_fields[key].configure(text="-")
+            self.blank_fields["state"].configure(
+                text=TEXT["blank_state_unread"], style="CardMuted.TLabel")
+            self.blank_label.configure(text=TEXT["blank_pending"],
+                                       style="Bad.TLabel")
+            return
+
+        when = self.blank_time or datetime.now()
+        self.blank_fields["date"].configure(text=when.strftime("%d-%m-%Y"))
+        self.blank_fields["time"].configure(text=when.strftime("%H:%M:%S"))
+
+        ok = self._blank_ok()
+        self.blank_fields["state"].configure(
+            text=TEXT["blank_state_valid"] if ok else TEXT["blank_state_invalid"],
+            style="CardGood.TLabel" if ok else "CardBad.TLabel")
+
+        # A CV needs at least two wells. Printing 0,00 for a single one would
+        # read as perfect agreement rather than as nothing to compare.
+        if self.blank_report and len(self.blank_report.wells) > 1:
+            # Comma for the decimal mark, as Gen5 prints it here.
+            text = f"{self.blank_report.cv_260:.2f}".replace(".", ",") + "%"
+        else:
+            text = "-"
+        self.blank_fields["cv"].configure(text=text)
+
+        if ok:
+            self.blank_label.configure(
+                text=TEXT["blank_done"].format(
+                    wells=", ".join(sorted(self.blank or {}))),
+                style="Good.TLabel")
+        else:
+            self.blank_label.configure(text=self._blank_reason(),
+                                       style="Bad.TLabel")
+
+
+    def _reset_blanks(self) -> None:
+        """Throw the blanking away: both the readings and the marks.
+
+        What Gen5 calls Reset Blanks. Clearing only the marks would leave the
+        old readings still being subtracted from the next samples.
+        """
+        self.blank_raw = None
+        self.blank_time = None
+        self._clear(self.blank_selected, self.blank_buttons)
+        self._refresh_state()
+
     def _refresh_plate(self) -> None:
         """Show which plate is loaded and whether its sheet is in."""
         self.plate_label.configure(
@@ -818,13 +1006,8 @@ class App(tk.Tk):
                 list=", ".join(f"{w}" for w in wavelengths) + " nm"
             )
         )
-        if self.blank:
-            self.blank_label.configure(
-                text=TEXT["blank_done"].format(wells=", ".join(sorted(self.blank))),
-                style="Good.TLabel",
-            )
-        else:
-            self.blank_label.configure(text=TEXT["blank_pending"], style="Bad.TLabel")
+        self._rebuild_blank()
+        self._refresh_blank_display()
 
         self.batch_label.configure(
             text=TEXT["batch_state"].format(reads=self.read_number,
@@ -842,7 +1025,7 @@ class App(tk.Tk):
         refuse the steps that are not available yet. Stopping the mistake is
         kinder than explaining it in a dialog after the fact.
         """
-        if self.blank is None:
+        if not self._blank_ok():
             nxt = "read_blank"
         elif not self.results:
             nxt = "read_samples"
@@ -854,7 +1037,9 @@ class App(tk.Tk):
         can_read = not (self.no_reader or self.lost)
         usable = {
             "read_blank": can_read,
-            "read_samples": can_read and self.blank is not None,
+            # Not merely "a blank was read": a blank that failed its own
+            # checks must not be subtracted from anybody's samples.
+            "read_samples": can_read and self._blank_ok(),
             "end_batch": bool(self.results),
         }
         if not can_read:
@@ -1009,26 +1194,39 @@ class App(tk.Tk):
 
         self._say(TEXT["reading"])
         try:
-            self.blank = self._read(wells, as_blank=True)
+            raw = self._read(wells, as_blank=True)
         except (ReaderError, NotImplementedError, OSError) as exc:
             self._mark_lost()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
             self._say(self._idle_text())
             return
 
-        for warning in check_blanks(self.blank):
-            messagebox.showwarning(TEXT["title"], warning.message)
-
+        self.blank_raw = raw
+        self.blank_time = datetime.now()
         self._refresh_state()
-        self._say(TEXT["blank_ok"].format(time=datetime.now().strftime("%H:%M")))
+
+        # No dialog on a bad blank. The verdict, the CV and the offending wells
+        # are all on screen now and stay there; a modal would only have to be
+        # dismissed before she could act on what it was telling her about.
+        if self._blank_ok():
+            self._say(TEXT["blank_ok"].format(
+                time=self.blank_time.strftime("%H:%M")))
+        else:
+            self._say(TEXT["blank_invalid_say"].format(
+                reason=self._blank_reason()))
 
     def _read_samples(self) -> None:
         wells = sorted(self.sample_selected)
         if not wells:
             messagebox.showinfo(TEXT["title"], TEXT["no_sample_wells"])
             return
-        if self.blank is None:
+        if self.blank_raw is None:
             messagebox.showinfo(TEXT["title"], TEXT["no_blank"])
+            return
+        if not self._blank_ok():
+            messagebox.showinfo(
+                TEXT["title"],
+                TEXT["blank_not_valid"].format(reason=self._blank_reason()))
             return
 
         self._say(TEXT["reading"])
@@ -1115,7 +1313,8 @@ class App(tk.Tk):
 
         self.results = []
         self.read_number = 0
-        self.blank = None
+        self.blank_raw = None
+        self.blank_time = None
         self._fill_table()
         self._refresh_state()
         self._say(TEXT["saved"].format(path=Path(path).name))

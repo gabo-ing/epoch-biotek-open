@@ -350,10 +350,26 @@ def average_blank(blanks: dict[str, RawWell]) -> RawWell:
 def blank_cv_percent(blanks: dict[str, RawWell], wavelength: int = 260) -> float:
     """Spread of the blank wells at one wavelength, as a coefficient of variation.
 
-    Gen5 prints this next to its averaged blank. It is the cheapest warning that
-    something is wrong before any sample is read: blanks that disagree mean a dirty
-    spot, a bubble, or a drop that did not bridge the gap, and every concentration
+    Gen5 prints this next to its averaged blank, per wavelength, on the [AVE] row
+    of the "Blank Results" table. It is the cheapest warning that something is
+    wrong before any sample is read: blanks that disagree mean a dirty spot, a
+    bubble, or a drop that did not bridge the gap, and every concentration
     computed from them inherits the problem.
+
+    This is the number the technician is used to reading, so it is computed the
+    way Gen5 reports it: on the **raw** absorbances at one wavelength, not on the
+    320 nm-corrected ones. (For deciding whether a blank is usable, `blank_spread`
+    below is the better statistic, and that is what this program gates on.)
+
+    Which standard deviation Gen5 uses is **not** settled by the exports we have.
+    Against the eight-well blank in Gen5_LVA_NAQ_0001 it reports 4,32 / 4,22 / 4,23
+    at 260 / 280 / 320 nm; recomputing from the printed values gives 4,60 / 4,33 /
+    4,32 with the sample SD used here and 4,31 / 4,05 / 4,04 with the population SD.
+    Neither matches throughout, and it cannot: those values are rounded to three
+    decimals, which on a ~0,045 blank moves the CV by more than the gap between the
+    two conventions. So we use the sample SD (n-1), the ordinary estimator for a
+    spread inferred from a handful of wells, and expect to agree with Gen5 to a few
+    tenths of a percentage point rather than exactly.
     """
     values = [
         b.readings[wavelength] for b in blanks.values() if wavelength in b.readings
@@ -390,6 +406,129 @@ def blank_spread(blanks: dict[str, RawWell]) -> float:
 # 0.5 mm an error of 0.004 AU is 4 ng/uL of dsDNA: nothing on a 400 ng/uL sample,
 # ruinous on a 10 ng/uL one.
 BLANK_SPREAD_LIMIT_AU = 0.004
+
+# How far one blank well may sit from the middle of the others before it is named
+# on screen as the spot to wipe.
+#
+# This threshold is OURS, not a recovered Gen5 constant: there is no export of a
+# blanking run Gen5 rejected, so there is nothing to reverse-engineer it from. It
+# is set from the one run we know Gen5 passed -- the eight wells of
+# Gen5_LVA_NAQ_0001, whose worst well sits 0.0015 AU from the median -- so a blank
+# as good as that one keeps about twice the room it actually needed. Being tighter
+# than that would mean reddening wells on blanks the instrument's own software was
+# happy with, and sending the technician back to wipe a plate that was fine.
+#
+# It sits below BLANK_SPREAD_LIMIT_AU so that a single bad spot gets named before
+# the set as a whole is condemned. The two limits are independent, and each catches
+# something the other does not: this one finds the outlier among wells that
+# otherwise agree, while the spread finds a set that disagrees without any one well
+# standing out -- two wells 0.005 AU apart, say, where neither can be called the
+# wrong one. Both are in the config file, for a lab that finds them too strict or
+# too slack to move without touching the program.
+BLANK_DIVERGENCE_LIMIT_AU = 0.003
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def divergent_blank_wells(
+    blanks: dict[str, RawWell],
+    limit_au: float = BLANK_DIVERGENCE_LIMIT_AU,
+) -> set[str]:
+    """Which blank wells sit too far from the others to be trusted.
+
+    Measured on the 320 nm-corrected reading, because that is what actually gets
+    subtracted from every sample, and against the **median** rather than the mean,
+    so that one bad spot is flagged instead of dragging the centre towards itself
+    and dirtying the verdict on its neighbours.
+
+    With two wells that disagree the median falls between them and both are
+    flagged. That is the honest answer: two readings that do not match cannot say
+    which of them is the wrong one.
+
+    One well alone is never divergent -- there is nothing to diverge from. It can
+    still be a bad blank, which is why a single-well blank is worth avoiding, but
+    this function cannot be the thing that detects it.
+    """
+    deltas = {name: b.corrected(260) for name, b in blanks.items()
+              if 260 in b.readings}
+    if len(deltas) < 2:
+        return set()
+
+    middle = _median(list(deltas.values()))
+    return {name for name, delta in deltas.items()
+            if abs(delta - middle) > limit_au}
+
+
+@dataclass(frozen=True)
+class BlankReport:
+    """The verdict on a set of blank wells, as the screen needs to show it.
+
+    `valid` is what gates reading samples. `divergent` is what gets painted red,
+    so the technician can drop those wells and re-blank rather than guess which
+    spot to wipe.
+    """
+
+    wells: tuple[str, ...]
+    divergent: tuple[str, ...]
+    spread_au: float
+    cv_percent: dict[int, float]
+    valid: bool
+    reason: str = ""
+
+    @property
+    def cv_260(self) -> float:
+        return self.cv_percent.get(260, 0.0)
+
+
+def blank_report(
+    blanks: dict[str, RawWell],
+    spread_limit_au: float = BLANK_SPREAD_LIMIT_AU,
+    divergence_limit_au: float = BLANK_DIVERGENCE_LIMIT_AU,
+) -> BlankReport:
+    """Judge a set of blank wells: per-well divergence, overall spread, CV.
+
+    A blank passes when no single well is off on its own *and* the wells together
+    span less than `spread_limit_au`. Both have to hold, because each catches a
+    failure the other misses: a tight cluster plus one outlier can still span
+    less than the spread limit, and two wells that simply disagree can span more
+    than it while neither is far enough from the median to be the one at fault.
+
+    When a well is singled out, `divergent` names it and the screen paints it
+    red, because there is something to do about it: discard that well, or wipe
+    that spot. When the set merely disagrees, nothing is painted red and the only
+    honest instruction is to blank the plate again.
+    """
+    if not blanks:
+        return BlankReport(wells=(), divergent=(), spread_au=0.0,
+                           cv_percent={}, valid=False, reason="empty")
+
+    wavelengths = sorted(set.intersection(*(set(b.readings) for b in blanks.values())))
+    cv = {w: blank_cv_percent(blanks, w) for w in wavelengths}
+    divergent = divergent_blank_wells(blanks, divergence_limit_au)
+    spread = blank_spread(blanks)
+
+    if divergent:
+        reason = "divergent"
+    elif spread > spread_limit_au:
+        reason = "spread"
+    else:
+        reason = ""
+
+    return BlankReport(
+        wells=tuple(sorted(blanks)),
+        divergent=tuple(sorted(divergent)),
+        spread_au=spread,
+        cv_percent=cv,
+        valid=not reason,
+        reason=reason,
+    )
+
 
 
 def check_blanks(blanks: dict[str, RawWell]) -> list["Warning_"]:
