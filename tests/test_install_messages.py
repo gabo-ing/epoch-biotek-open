@@ -17,17 +17,19 @@ from epoch_open import reader          # noqa: E402  (after the path fix)
 
 
 def _launcher_help(platform):
-    """_tkinter_help() from run_gui.py, evaluated for a given platform.
+    """tkinter_help() as it reads on a given platform.
 
-    Read out of the file rather than imported, because importing the launcher
-    on a machine that has tkinter would not exercise the failure path.
+    Imported now rather than exec'd out of the launcher's source. It used to
+    live in run_gui.py, where the only way to reach it without tkinter
+    installed was to read the file and exec the part above the import. Both
+    programs share it from epoch_open/launch.py, which deliberately imports no
+    tkinter of its own, so it can simply be called.
     """
-    source = (ROOT / "run_gui.py").read_text().split("try:")[0]
-    namespace = {"sys": sys}
-    exec(compile(source, "run_gui.py", "exec"), namespace)
+    from epoch_open.launch import tkinter_help
+
     real, sys.platform = sys.platform, platform
     try:
-        return namespace["_tkinter_help"]()
+        return tkinter_help()
     finally:
         sys.platform = real
 
@@ -104,6 +106,23 @@ class TestMissingTkinter:
 
     def test_the_launcher_catches_only_tkinter(self):
         """Any other missing module must still raise, not be swallowed."""
-        source = (ROOT / "run_gui.py").read_text()
+        source = (ROOT / "epoch_open" / "launch.py").read_text()
         assert 'exc.name not in ("tkinter", "_tkinter")' in source
         assert "raise" in source
+
+    def test_both_programs_have_a_launcher(self):
+        """Two programs now, and each needs its own way in.
+
+        Named after the program rather than after the window, because the
+        wrong plate in the wrong assay is the expensive mistake here: the
+        Take3's quartz spots do not survive Salkowski reagent.
+        """
+        take3 = (ROOT / "run_take3.py").read_text()
+        multi = (ROOT / "run_multispectral.py").read_text()
+        assert "epoch_open.gui" in take3
+        assert "epoch_open.gui_curve" in multi
+        # Each should point at the other, so whoever opens the wrong one is
+        # told where the right one is.
+        assert "run_multispectral.py" in take3
+        assert "run_take3.py" in multi
+        assert "Take3" in multi

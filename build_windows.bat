@@ -1,5 +1,8 @@
 @echo off
-REM Build EpochTake3.exe on Windows. Run this from the project folder.
+REM Build both programs on Windows. Run this from the project folder.
+REM
+REM   EpochTake3.exe          nucleic acids on a Take3 plate
+REM   EpochMultispectral.exe  colorimetric assays in a 96-well plate
 REM
 REM Needs Python 3.10 or newer from python.org, with "Add python.exe to PATH"
 REM ticked. Newer is fine; 3.13 is what this was developed against.
@@ -20,7 +23,7 @@ python -m pip install --upgrade pip
 python -m pip install pyserial pyinstaller || goto :fail
 
 echo.
-echo === Building EpochTake3.exe ===
+echo === Building EpochTake3.exe (1 of 2) ===
 REM Excluding standard-library packages the program never imports keeps the
 REM executable small. If the build ever fails, delete the --exclude-module lines
 REM first: they are an optimisation, not a requirement.
@@ -29,11 +32,22 @@ python -m PyInstaller --onefile --windowed --name EpochTake3 ^
     --exclude-module unittest --exclude-module pydoc --exclude-module doctest ^
     --exclude-module pdb --exclude-module sqlite3 --exclude-module lib2to3 ^
     --exclude-module test --exclude-module distutils ^
-    run_gui.py || goto :fail
+    run_take3.py || goto :fail
+
+echo.
+echo === Building EpochMultispectral.exe (2 of 2) ===
+python -m PyInstaller --onefile --windowed --name EpochMultispectral ^
+    --hidden-import serial --hidden-import serial.tools.list_ports ^
+    --exclude-module unittest --exclude-module pydoc --exclude-module doctest ^
+    --exclude-module pdb --exclude-module sqlite3 --exclude-module lib2to3 ^
+    --exclude-module test --exclude-module distutils ^
+    run_multispectral.py || goto :fail
 
 echo.
 echo === Done ===
-echo The program is at:  dist\EpochTake3.exe
+echo The programs are at:
+echo     dist\EpochTake3.exe          nucleic acids, Take3 plate
+echo     dist\EpochMultispectral.exe  colorimetric assays, 96-well plate
 echo.
 echo Copy epoch_open.example.json next to it as epoch_open.json if you want to
 echo preset the plate; otherwise use "Cambiar placa..." inside the program.

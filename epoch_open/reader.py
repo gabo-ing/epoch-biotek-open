@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 
 from . import take3
-from .plates import TAKE3
+from .plates import PLATE_96, TAKE3
 from .quant import REFERENCE_NM, RawWell
 
 # Confirmed on the instrument itself (serial 254717, plugged into colonial-one):
@@ -627,6 +627,31 @@ class EpochReader(ReaderBackend):
         This is the default. `batch=False` falls back to one pass per wavelength,
         which is the path proven since 2026-10-22 and is kept for diagnosis.
         """
+        gathered = self.read_plate(wells, wavelengths, geometry=TAKE3,
+                                   timeout=timeout)
+        return {w: RawWell(well=w, readings=v) for w, v in gathered.items()}
+
+    def read_plate(
+        self, wells: list[str], wavelengths: list[int],
+        geometry=PLATE_96, timeout: float = 300.0,
+    ) -> dict[str, dict[int, float]]:
+        """Read a rectangle of wells at every wavelength, in one pass, raw.
+
+        The same single-pass read as `read_batched`, with the two Take3
+        assumptions taken out of it, because neither holds for a colorimetric
+        assay in an ordinary plate:
+
+        * the plate geometry is a parameter rather than always the Take3's
+          micro-spot raster -- a flat 96-well plate is read as cells, and
+          telling the reader otherwise aims the optics at the wrong places;
+        * the result is plain `{well: {nm: absorbance}}` instead of `RawWell`,
+          which requires a 320 nm reference reading. That requirement is right
+          for nucleic acids and meaningless at 530 nm, where there is no
+          background to subtract unless the caller asks for one.
+
+        `read_batched` is now this with `geometry=TAKE3`, so both programs go
+        through the same verified read.
+        """
         if not self.supports(CAP_RDOP22):
             raise ReaderError("This reader does not support the RDOP22 read protocol.")
 
@@ -634,7 +659,7 @@ class EpochReader(ReaderBackend):
         wanted = {take3.well_to_indices(w): w for w in wells}
         ordered = sorted(set(wavelengths))
 
-        self.set_plate(TAKE3)
+        self.set_plate(geometry)
         import time
         time.sleep(self.SETTLE_SECONDS)
 
@@ -661,7 +686,7 @@ class EpochReader(ReaderBackend):
                 if well is not None:
                     gathered[well][wavelength] = absorbance
 
-        return {w: RawWell(well=w, readings=v) for w, v in gathered.items()}
+        return gathered
 
     def read_wells(
         self, wells: list[str], wavelengths: list[int] | None = None,
@@ -718,3 +743,78 @@ class EpochReader(ReaderBackend):
         if self._serial is not None:
             self._serial.close()
             self._serial = None
+
+
+class MockCurveReader:
+    """A fake instrument for colorimetric assays, where wells are not independent.
+
+    MockReader gives every well its own random signal, which is right for
+    nucleic-acid work -- one drop tells you nothing about the next. A standard
+    curve is the opposite: the whole point is that the standards lie on a line,
+    so a simulator that randomises them produces a curve with an r-squared
+    near zero and a program that looks broken when it is working.
+
+    So this one is told what it is pretending to hold. `truth` maps a well to
+    the concentration the simulator should act as though it contains, and the
+    absorbance follows from it:
+
+        A(nm) = intercept + slope * concentration * band(nm) + noise
+
+    `band` is a Gaussian centred on `peak_nm`, which gives the coloured product
+    an absorption band of a believable width instead of a single wavelength
+    that responds and others that do not. It is what makes the peak-finding
+    scan demonstrable without reagents.
+
+    Numbers are invented. Nothing it produces is a measurement, and the
+    interface says so on screen whenever this backend is in use.
+    """
+
+    def __init__(self, seed: int | None = None, slope: float = 0.0200,
+                 intercept: float = 0.0020, noise: float = 0.0015,
+                 peak_nm: int = 530, width_nm: float = 45.0):
+        self._random = random.Random(seed)
+        self.slope = slope
+        self.intercept = intercept
+        self.noise = noise
+        self.peak_nm = peak_nm
+        self.width_nm = width_nm
+        self.truth: dict[str, float] = {}
+
+    def connect(self) -> ReaderInfo:
+        self.info = ReaderInfo(
+            model="Epoch (simulated)",
+            serial="254717",
+            firmware="unknown",
+            port="none",
+        )
+        return self.info
+
+    def band(self, wavelength: int) -> float:
+        """How strongly the pretend product absorbs at this wavelength, 0-1."""
+        import math
+
+        offset = (wavelength - self.peak_nm) / self.width_nm
+        return math.exp(-(offset ** 2))
+
+    def read_plate(
+        self, wells: list[str], wavelengths: list[int] | None = None,
+        geometry=None, timeout: float = 300.0,
+    ) -> dict[str, dict[int, float]]:
+        """Plain readings, the same shape EpochReader.read_plate returns."""
+        wavelengths = wavelengths or [530]
+        readings = {}
+        for well in wells:
+            concentration = self.truth.get(well, 0.0)
+            values = {}
+            for wavelength in wavelengths:
+                absorbance = (
+                    self.intercept
+                    + self.slope * concentration * self.band(wavelength)
+                    + self._random.gauss(0, self.noise)
+                )
+                values[wavelength] = round(absorbance, 4)
+            readings[well] = values
+        return readings
+
+    def close(self) -> None:
+        pass

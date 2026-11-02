@@ -47,7 +47,7 @@ python3 -m PyInstaller --windowed --name EpochTake3 \
     --exclude-module unittest --exclude-module pydoc --exclude-module doctest \
     --exclude-module pdb --exclude-module sqlite3 --exclude-module lib2to3 \
     --exclude-module test --exclude-module distutils \
-    run_gui.py
+    run_take3.py
 
 echo
 echo "=== Done ==="

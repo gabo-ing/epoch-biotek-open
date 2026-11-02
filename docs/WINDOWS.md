@@ -31,7 +31,7 @@ The python.org build includes tkinter; the Microsoft Store build has been known 
 to, so avoid it.
 
     pip install pyserial pyinstaller
-    pyinstaller --onefile --windowed --name EpochTake3 --icon NONE run_gui.py
+    pyinstaller --onefile --windowed --name EpochTake3 --icon NONE run_take3.py
 
 - `--onefile` produces a single `dist\EpochTake3.exe`.
 - `--windowed` suppresses the console window, so no black box appears behind the app.

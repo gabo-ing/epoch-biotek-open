@@ -301,3 +301,112 @@ def export_results(path, results, sample_names=None, metadata: dict | None = Non
             ("Detalle", detail, WIDTHS),
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# Colorimetric standard-curve assays (epoch_open/curve.py).
+#
+# A different workbook from the Take3 one, because a different thing has to be
+# auditable. On the Take3 side the calculation is physics and the inputs are
+# the plate's pathlengths, so the detail sheet carries the raw absorbances. In
+# a curve assay the calculation *is* the curve, so the standards and the fit
+# have to travel with the results: a concentration read off an unrecorded
+# curve cannot be checked by anybody later, including the person who measured
+# it.
+
+CURVE_SUMMARY_HEADERS = [
+    "Muestra", "Pozo", "Absorbancia", "Concentracion", "Unidad",
+    "En rango", "Aviso",
+]
+CURVE_SUMMARY_WIDTHS = [26, 8, 13, 14, 10, 10, 52]
+
+CURVE_FIT_HEADERS = ["Pozo", "Concentracion patron", "Absorbancia", "Residual"]
+CURVE_FIT_WIDTHS = [10, 22, 13, 12]
+
+
+def curve_to_summary(results, unit: str) -> list[list]:
+    """The samples, one row each, named if they were named."""
+    rows = [list(CURVE_SUMMARY_HEADERS)]
+    for result in results:
+        rows.append([
+            result.name or result.well,
+            result.well,
+            round(result.absorbance, 4),
+            round(result.concentration, 3),
+            unit,
+            "si" if result.in_range else "NO",
+            "  ".join(str(n) for n in result.notes),
+        ])
+    return rows
+
+
+def curve_to_fit_sheet(fit) -> list[list]:
+    """The standards, their residuals, and the line they produced.
+
+    The fit's own misgivings are written out in full rather than summarised as
+    a pass mark. A reader six months from now needs to know not just that the
+    curve was accepted but what it was accepted in spite of.
+    """
+    rows = [list(CURVE_FIT_HEADERS)]
+    for standard in fit.standards:
+        rows.append([
+            standard.well,
+            standard.concentration,
+            round(standard.absorbance, 4),
+            round(fit.residual(standard), 5),
+        ])
+
+    rows.append([])
+    rows.append(["Ajuste", "absorbancia = pendiente x concentracion + intercepto"])
+    rows.append(["Pendiente", round(fit.slope, 6)])
+    rows.append(["Intercepto", round(fit.intercept, 6)])
+    rows.append(["r2", round(fit.r_squared, 6)])
+    rows.append(["Peor residual", round(fit.worst_residual(), 5)])
+    rows.append(["Patrones", fit.n])
+    rows.append(["Unidad", fit.unit])
+    rows.append(["Rango medible (absorbancia)",
+                 f"{fit.bottom:.4f} - {fit.top:.4f}"])
+    rows.append(["Estado", "UTILIZABLE" if fit.usable else "NO UTILIZABLE"])
+    for note in fit.notes:
+        rows.append(["Aviso de la curva", str(note)])
+    return rows
+
+
+def curve_to_detail(results, fit, wavelengths) -> list[list]:
+    """Every well that was read, raw, with nothing subtracted.
+
+    Including the standards, so the whole plate can be reconstructed from this
+    sheet alone without trusting any of the arithmetic above it.
+    """
+    wavelengths = list(wavelengths)
+    rows = [["Pozo", "Rol"] + [f"{nm} nm" for nm in wavelengths]]
+    for standard in fit.standards:
+        rows.append([standard.well, "patron"] + [""] * len(wavelengths))
+    for result in results:
+        rows.append(
+            [result.well, "muestra"]
+            + [round(result.raw.get(nm), 4) if nm in result.raw else ""
+               for nm in wavelengths]
+        )
+    return rows
+
+
+def export_curve(path, results, fit, wavelengths, metadata: dict | None = None):
+    """Write the three sheets a curve assay needs to be checkable later."""
+    summary = curve_to_summary(results, fit.unit)
+
+    summary.append([])
+    summary.append(["Leido el", datetime.now().strftime("%Y-%m-%d %H:%M")])
+    summary.append(["r2 de la curva", round(fit.r_squared, 6)])
+    summary.append(["Patrones", fit.n])
+    for key, value in (metadata or {}).items():
+        summary.append([key, value])
+
+    return write_workbook(
+        path,
+        [
+            ("Resumen", summary, CURVE_SUMMARY_WIDTHS),
+            ("Curva", curve_to_fit_sheet(fit), CURVE_FIT_WIDTHS),
+            ("Detalle", curve_to_detail(results, fit, wavelengths), None),
+        ],
+    )

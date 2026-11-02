@@ -1,7 +1,24 @@
 # epoch-open
 
-Free replacement software for a BioTek Epoch microplate spectrophotometer with a Take3
-micro-volume plate, for RNA/DNA quantification.
+Free replacement software for a BioTek Epoch microplate spectrophotometer. Two
+programs, one instrument, one shared driver:
+
+| Program | For | Plate |
+|---|---|---|
+| **epoch-take3** (`run_take3.py`) | RNA/DNA/protein quantification at 260/280 nm | Take3 micro-volume, 16 spots |
+| **epoch-multispectral** (`run_multispectral.py`) | Colorimetric assays against a standard curve -- IAA/Salkowski at 530 nm, Bradford, MTT, ELISA | Ordinary transparent 96-well |
+
+They share the serial driver, the plate geometries, the Excel writer and the
+whole look (`epoch_open/ui.py`), because it is the same instrument on the same
+bench in front of the same person. What differs is the arithmetic: the Take3
+program computes concentration from physics, and the multispectral one
+interpolates it from standards measured in the same run.
+
+> **The Take3 plate must never be used for colorimetric assays.** Salkowski
+> reagent is ferric chloride in strong acid; it would ruin the quartz
+> micro-spots the other program depends on, and the plate holds 2 uL where
+> those assays need ~200. The warning is on the multispectral screen as well
+> as here.
 
 The lab owns the instrument. The vendor software's licence activations are exhausted, so
 the instrument was unusable. This project writes a new program that talks to the reader directly. 
@@ -32,9 +49,13 @@ design more than anything technical does:
 | xlsx export (`epoch_open/xlsx.py`) | Done, no dependencies, verified opens in LibreOffice |
 | Take3 layout (`epoch_open/take3.py`) | Done, confirmed from the factory sheet (A2-H3) |
 | Reader interface + simulator (`epoch_open/reader.py`) | Done |
-| Technician GUI (`epoch_open/gui.py`) | Working against the real instrument |
+| Take3 GUI (`epoch_open/gui.py`) | Working against the real instrument |
+| Shared chrome + window fitting (`epoch_open/ui.py`) | Done -- palette, drawn buttons, screen fitting, ttk theme |
+| Curve math (`epoch_open/curve.py`) | Done -- least squares, r2, residuals, range warnings |
+| Multispectral GUI (`epoch_open/gui_curve.py`) | Written and tested on the simulator; **not yet run against the instrument** |
 | Blank validation | Done -- per-well verdict, CV%, discard and reset |
-| Test suite | 262 tests passing |
+| Blank validation | Done -- per-well verdict, CV%, discard and reset |
+| Test suite | 325 tests passing |
 | Protocol capture procedure (`docs/CAPTURE.md`) | No longer needed |
 | Serial protocol decode | **Done** — reads confirmed on the instrument |
 | USB transport | **Solved** — reader is FTDI virtual COM, pyserial talks to it (`docs/FINDINGS.md`) |
@@ -220,9 +241,74 @@ which on a ~0.045 blank moves a recomputed CV by more than the gap between the
 two standard-deviation conventions, so the file cannot even say which one Gen5
 used. Expect agreement to a few tenths of a percentage point.
 
+## Blanking
+
+The blank is its own step with its own verdict, the way the technician works at
+the bench: mark the water spots, read them, look at the grid, and only then
+quantify.
+
+![The blank grid with one bad spot](docs/img/blanking-invalid.png)
+
+Each blank well shows one of four things:
+
+| | |
+|---|---|
+| white | not part of the blank |
+| **blue** | marked, not read yet |
+| **green** | read, and it agrees with the others |
+| **red** | read, and it does not agree -- this is the spot to wipe |
+
+Beside the grid are the four fields Gen5 prints: date, time, `VALIDO` /
+`NO VALIDO`, and the CV%. **Samples cannot be read while the blank is not
+valid** -- the button is disabled rather than failing afterwards.
+
+There are two ways out of a bad blank, and the line under the grids says which
+one applies:
+
+- **One well is red.** Click it to discard it. The blank is recomputed from the
+  rest without re-reading anything, and clicking again puts it back.
+- **Nothing is red but the wells still disagree.** No single well can be blamed,
+  so there is nothing to discard: wipe the plate and blank again. `Reiniciar`
+  throws away the readings *and* the marks, which is what Gen5 calls Reset
+  Blanks.
+
+Marking a new well after a read suspends the blank until it is read too: half a
+blank, part measured and part not, must never be subtracted from anybody's
+samples.
+
+### Where the two limits come from
+
+A blank fails if any single well sits more than **0.003 AU** from the median of
+the others, or if the wells together span more than **0.004 AU**. Both are
+measured after the 320 nm correction, because what gets subtracted from every
+sample is the difference, not the raw reading.
+
+**These two numbers are this project's own, not Gen5's.** Gen5 shows a verdict
+but never says what it tests, and we have no export of a blanking run it
+rejected, so there was nothing to reverse-engineer. They are set from the one
+run we know Gen5 *passed* -- the eight wells of `Gen5_LVA_NAQ_0001`, which span
+0.002 AU with the worst well 0.0015 AU from the median -- so a blank that good
+keeps about twice the room it actually needed. Both are in `epoch_open.json`:
+
+    "blank_spread_limit_au": 0.004,
+    "blank_divergence_limit_au": 0.003
+
+A lab that finds them too strict or too slack can move them without a rebuild.
+If they ever turn out to redden wells on blanks that are genuinely fine, that is
+the file to edit, and worth telling us about.
+
+The CV% is computed the way Gen5 reports it, on the raw absorbances per
+wavelength, because that is the number the technician is used to reading. It is
+*not* what the program gates on -- the spread above is -- and it will not match
+Gen5 to the last digit: the exported absorbances are rounded to three decimals,
+which on a ~0.045 blank moves a recomputed CV by more than the gap between the
+two standard-deviation conventions, so the file cannot even say which one Gen5
+used. Expect agreement to a few tenths of a percentage point.
+
 ## Running it today
 
-    python3 run_gui.py
+    python3 run_take3.py            nucleic acids on a Take3 plate
+    python3 run_multispectral.py    colorimetric assays in a 96-well plate
 
 **Without an instrument it will not produce numbers.** The window opens, the plate
 can be laid out and a saved file can be reopened, but the read buttons are greyed
@@ -235,7 +321,8 @@ The simulator is still there for development and for reviewing the screen withou
 hardware, but it has to be asked for, and anything it produces is labelled
 simulated on screen and inside any file it saves:
 
-    python3 run_gui.py --sim
+    python3 run_take3.py --sim
+    python3 run_multispectral.py --sim
 
 The order you switch things on does not matter. If the reader is not there at
 startup the program keeps looking for it every few seconds, turns the badge green
@@ -250,8 +337,20 @@ reading is disabled again, rather than quietly reverting to simulated numbers.
 
 ## Layout
 
-    epoch_open/quant.py    quantification, pathlength correction, purity ratios
+    epoch_open/reader.py   serial driver, plate reads, both simulators
+    epoch_open/plates.py   Take3 and standard 96-well geometries
+    epoch_open/ui.py       the look both programs share, and window fitting
+    epoch_open/launch.py   starting a program, and the missing-tkinter message
+
+    epoch_open/quant.py    Take3: quantification, pathlength, purity ratios
+    epoch_open/gui.py      Take3: the screen
+
+    epoch_open/curve.py    multispectral: standard curves and their warnings
+    epoch_open/gui_curve.py  multispectral: the screen
+
+    epoch_open/xlsx.py     both workbooks, no dependencies
     tests/                 test suite and a dependency-free runner
+    docs/MULTISPECTRAL.md  how the curve program works and what it refuses
     docs/CAPTURE.md        how to capture the protocol from the running Gen5
     docs/FINDINGS.md       what the original instrument disks established
     captures/             (empty) .pcapng files and Gen5 reference numbers go here
