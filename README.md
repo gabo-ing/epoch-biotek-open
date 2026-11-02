@@ -34,7 +34,7 @@ design more than anything technical does:
 | Reader interface + simulator (`epoch_open/reader.py`) | Done |
 | Technician GUI (`epoch_open/gui.py`) | Working against the real instrument |
 | Blank validation | Done -- per-well verdict, CV%, discard and reset |
-| Test suite | 250 tests passing |
+| Test suite | 262 tests passing |
 | Protocol capture procedure (`docs/CAPTURE.md`) | No longer needed |
 | Serial protocol decode | **Done** — reads confirmed on the instrument |
 | USB transport | **Solved** — reader is FTDI virtual COM, pyserial talks to it (`docs/FINDINGS.md`) |

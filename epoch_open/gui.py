@@ -393,6 +393,7 @@ class App(tk.Tk):
         self._style()
         self._build()
         self._refresh_state()
+        self._shrink_to_content()
 
         if os.environ.get("EPOCH_GUI_TOPMOST") == "1":
             self.attributes("-topmost", True)
@@ -416,9 +417,6 @@ class App(tk.Tk):
         window border and taskbar are taken off, and the column that fell off
         the right-hand edge was the one carrying the warnings.
         """
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-
         # How many real pixels the system puts in an inch. 96 is 100%; a laptop
         # at 150% reports 144. Points are handled by Tk once it is told the
         # scaling, but every hand-written pixel size has to be multiplied.
@@ -426,17 +424,17 @@ class App(tk.Tk):
         self.scale = max(1.0, dpi / 96.0)
         self.tk.call("tk", "scaling", dpi / 72.0)
 
+        work_w, work_h = self._work_area()
+
         # Decide the layout against logical space, not raw pixels: a 1920x1080
         # screen at 150% has the usable room of a 1280x720 one.
-        logical_h = screen_h / self.scale
+        logical_h = work_h / self.scale
 
-        width = min(self.px(1180), screen_w - self.px(80))
-        height = min(self.px(980), screen_h - self.px(58))
+        width = min(self.px(1180), work_w - self.px(40))
+        height = min(self.px(980), work_h - self.px(40))
         self.minsize(min(self.px(900), width), min(self.px(600), height))
 
-        x = max(0, (screen_w - width) // 2)
-        y = max(0, (screen_h - height) // 3)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        self._place(width, height)
 
         # Readable at arm's length on a roomy screen, but a cramped laptop needs
         # the space more than it needs the extra point.
@@ -444,6 +442,67 @@ class App(tk.Tk):
         self.compact = logical_h < 1000
         self.base_pt = 10 if self.compact else 11
         self.ui_font = self._pick_font()
+
+    def _work_area(self) -> tuple[int, int]:
+        """The part of the screen a window can actually occupy.
+
+        winfo_screenheight() is the whole panel, taskbar and all, so sizing
+        against it puts the bottom of the window underneath the taskbar --
+        which is exactly where the status bar lives. Tk already knows better:
+        on Windows wm maxsize is the work area, and on macOS it leaves out the
+        menu bar. X11 usually just repeats the screen size, so the answer is
+        sanity-checked and falls back rather than being trusted blindly.
+        """
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        try:
+            max_w, max_h = self.wm_maxsize()
+        except tk.TclError:
+            return screen_w, screen_h
+        # Bigger than the screen, or implausibly small, means Tk is guessing.
+        if not 0 < max_w <= screen_w or not 0 < max_h <= screen_h:
+            return screen_w, screen_h
+        if max_h < screen_h // 2:
+            return screen_w, screen_h
+        return max_w, max_h
+
+    def _place(self, width: int, height: int) -> None:
+        """Size the window and put it where the whole of it is on the screen."""
+        work_w, work_h = self._work_area()
+        width = min(width, work_w)
+        height = min(height, work_h)
+        # A third of the way down sits better than dead centre, but never so
+        # far that the bottom edge -- the status bar -- leaves the screen.
+        x = max(0, min((work_w - width) // 2, work_w - width))
+        y = max(0, min((work_h - height) // 3, work_h - height))
+        self.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _shrink_to_content(self) -> None:
+        """Pull the window in to what the layout actually asked for.
+
+        The opening size is chosen before anything is built, so it is a guess
+        made against the screen rather than against the contents. Once the
+        widgets exist they can say how much room they want, and on a cramped
+        laptop that difference is what decides whether the status bar lands
+        above the taskbar or under it.
+
+        Only ever shrinks. Growing here could push the window back off the
+        screen it was just fitted to.
+        """
+        self.update_idletasks()
+        want_w, want_h = self.winfo_reqwidth(), self.winfo_reqheight()
+        if want_w < 100 or want_h < 100:      # not laid out yet; leave it be
+            return
+        try:
+            now_w, now_h = (int(n) for n in
+                            self.geometry().split("+")[0].split("x"))
+        except ValueError:
+            return
+        min_w, min_h = self.minsize()
+        width = max(min_w, min(now_w, want_w))
+        height = max(min_h, min(now_h, want_h))
+        if (width, height) != (now_w, now_h):
+            self._place(width, height)
 
     def px(self, logical: int) -> int:
         """A hand-written pixel size, in this screen's real pixels."""
@@ -548,6 +607,20 @@ class App(tk.Tk):
     def _build(self) -> None:
         self._build_banner()
 
+        # Packed before the body although it sits below it. The packer hands
+        # out space in the order it is given, so whatever goes last is what
+        # gets squeezed to nothing when the window is shorter than its
+        # contents -- and that was this bar, the one line saying what the
+        # program is waiting for. Reserving its slab first makes the body
+        # absorb the shortfall instead, which it can: it scrolls and it has
+        # slack. The bar has one line and no slack at all.
+        self.status = tk.Label(
+            self, text=self._idle_text(), anchor="w", justify="left",
+            bg=STATUS_BAR, fg=MUTED, padx=16, pady=5 if self.compact else 8,
+            font=(self.ui_font, self.base_pt - 1),
+        )
+        self.status.pack(fill="x", side="bottom")
+
         body = ttk.Frame(self, padding=8)
         body.pack(fill="both", expand=True)
 
@@ -574,13 +647,6 @@ class App(tk.Tk):
         right = ttk.Frame(body)
         right.pack(side="left", fill="both", expand=True)
         self._build_results(right)
-
-        self.status = tk.Label(
-            self, text=self._idle_text(), anchor="w", justify="left",
-            bg=STATUS_BAR, fg=MUTED, padx=16, pady=5 if self.compact else 8,
-            font=(self.ui_font, self.base_pt - 1),
-        )
-        self.status.pack(fill="x", side="bottom")
 
     def _build_banner(self) -> None:
         """The app's own title bar, with the connection badge sitting in it."""

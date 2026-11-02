@@ -169,7 +169,13 @@ class TestItFitsTheScreen:
             app.destroy()
 
     def test_the_contents_fit_without_being_cut_off(self):
-        """A laptop screen must still show the buttons and the status line."""
+        """The window is never smaller than the layout inside it asked for.
+
+        This says nothing about whether the window fits on the screen, and it
+        passed happily throughout the bug where it did not -- an oversized
+        window satisfies it exactly as well as a right-sized one. The screen
+        and the status bar are covered in tests/test_gui_fit.py.
+        """
         app = _app()
         if app is None:
             return
