@@ -1,7 +1,13 @@
-# epoch-open
+# Epoch + TAKE3 - open software
 
-Free replacement software for a BioTek Epoch microplate spectrophotometer. Two
-programs, one instrument, one shared driver:
+Free MultiOS replacement software for a BioTek Epoch microplate spectrophotometer with a Take3
+micro-volume plate, for RNA/DNA quantification.
+
+Inspiration: Our lab owns the instrument but vendor software's licence activations were exhausted. As the instrument was not usable without the software, a new program was written. This program talks to the reader directly AND can be used on Linux/Windows
+
+It does not modify, patch, bypass or inspect the vendor software, and nothing here depends on it at runtime.
+
+There are two programs here, sharing one driver:
 
 | Program | For | Plate |
 |---|---|---|
@@ -9,26 +15,13 @@ programs, one instrument, one shared driver:
 | **epoch-multispectral** (`run_multispectral.py`) | Colorimetric assays against a standard curve -- IAA/Salkowski at 530 nm, Bradford, MTT, ELISA | Ordinary transparent 96-well |
 
 They share the serial driver, the plate geometries, the Excel writer and the
-whole look (`epoch_open/ui.py`), because it is the same instrument on the same
-bench in front of the same person. What differs is the arithmetic: the Take3
-program computes concentration from physics, and the multispectral one
-interpolates it from standards measured in the same run.
-
-> **The Take3 plate must never be used for colorimetric assays.** Salkowski
-> reagent is ferric chloride in strong acid; it would ruin the quartz
-> micro-spots the other program depends on, and the plate holds 2 uL where
-> those assays need ~200. The warning is on the multispectral screen as well
-> as here.
-
-The lab owns the instrument. The vendor software's licence activations are exhausted, so
-the instrument was unusable. This project writes a new program that talks to the reader directly. 
-
-It does not modify, patch, bypass or inspect the vendor software, and nothing here depends on it at runtime.
+whole look (`epoch_open/ui.py`). What differs is the arithmetic: epoch-take3
+computes concentration from physics, epoch-multispectral interpolates it from
+standards measured in the same run. See `docs/MULTISPECTRAL.md`.
 
 ## Who uses this
 
-The daily user is a lab technician who is not a computer person. That constrains the
-design more than anything technical does:
+This is focused for lab technicians/students/PostDocs/etc. That's why:
 
 - Ships as a **single `.exe`** on Windows. Double-click. No Python, no install, no
   console window, no config files to edit.
@@ -40,6 +33,12 @@ design more than anything technical does:
 - Sample type (dsDNA / ssDNA / RNA) is a dropdown, defaulted to whatever the lab uses most.
 - Problems are reported in plain language next to the affected well, never as an error
   code or a traceback.
+
+## epoch-take3 MUST be used with a TAKE3 plate, with its provided pathlenght table sheet (should have come with the TAKE3 plate). If not available, it can be used with standard 0.5 correction.
+
+**epoch-multispectral is the opposite: never put a Take3 plate in it.** Those
+assays use acidic reagents that would damage the plate irreversibly. Use a
+plain transparent 96-well plate -- see `docs/MULTISPECTRAL.md`.
 
 ## Status
 
@@ -53,9 +52,6 @@ design more than anything technical does:
 | Shared chrome + window fitting (`epoch_open/ui.py`) | Done -- palette, drawn buttons, screen fitting, ttk theme |
 | Curve math (`epoch_open/curve.py`) | Done -- least squares, r2, residuals, range warnings |
 | Multispectral GUI (`epoch_open/gui_curve.py`) | Written and tested on the simulator; **not yet run against the instrument** |
-| Blank validation | Done -- per-well verdict, CV%, discard and reset |
-| Blank validation | Done -- per-well verdict, CV%, discard and reset |
-| Test suite | 325 tests passing |
 | Protocol capture procedure (`docs/CAPTURE.md`) | No longer needed |
 | Serial protocol decode | **Done** — reads confirmed on the instrument |
 | USB transport | **Solved** — reader is FTDI virtual COM, pyserial talks to it (`docs/FINDINGS.md`) |
@@ -87,7 +83,7 @@ engineering: let the technician use it, and measure blank drift over a long sess
 
 ## Quantification
 
-Recovered from this lab's own Gen5 exports and verified against them: subtract the
+Uses the same method as Gen5 (verified on the same samples): subtract the
 320 nm reference from each measurement wavelength, subtract the per-well blank, scale
 from the 0.5 mm Take3 path to 1 cm, multiply by the extinction factor. For dsDNA that
 reduces to `ng/uL = A260 x 1000`.
@@ -126,12 +122,13 @@ Reading a plate also needs the **FTDI VCP driver** on Windows. Linux needs nothi
    **"Add python.exe to PATH"** during setup. Do not use the Microsoft Store
    build: it has shipped without tkinter, and the window will not open.
 2. **FTDI VCP driver** from <https://ftdichip.com/drivers/vcp-drivers/>, installed
-   **before** the reader is plugged in. The disks that came with the Epoch have
-   `USB driver/CDM20600.exe`, which works but dates from 2009.
+   **before** the reader is plugged in. 
 3. **The source**: on GitHub use *Code -> Download ZIP*, and unpack it somewhere
    stable such as `C:\EpochTake3\` — not Downloads, where it will be tidied away.
 4. **Build**: double-click `build_windows.bat`. It checks Python and tkinter,
-   installs `pyserial` and `pyinstaller`, and leaves `dist\EpochTake3.exe`.
+   installs `pyserial` and `pyinstaller`, and
+
+## After installation, the binaries are left as `dist\EpochTake3.exe` and `dist\EpochMultispectral.exe`.
 
 The exe is self-contained: the technician needs no Python and no console. Put it
 somewhere stable and make a Desktop shortcut. `docs/WINDOWS.md` has the checks to
@@ -150,11 +147,11 @@ program will find the reader and still be unable to open it.
 Install Python from <https://www.python.org/downloads/> rather than using the
 `python3` that ships with macOS, which has come with a Tk too old to draw this
 correctly. Homebrew's Python does not include Tk at all — it is packaged
-separately as `brew install python-tk@3.13` (matching your minor version), and
+separately as `brew install python-tk@3.13`, and
 without it the program stops with `ModuleNotFoundError: _tkinter`. Then:
 
     pip3 install pyserial
-    python3 run_gui.py
+    python3 run_take3.py
 
 `bash build_macos.sh` produces `dist/EpochTake3.app`. PyInstaller cannot
 cross-compile, so that has to run on a Mac. The result is unsigned, so the first
@@ -172,139 +169,6 @@ screen, the layout tightening by itself for the shorter usable height
 actual Epoch, and `build_macos.sh` has never been run, so the `.app` route is
 still unverified.
 
-## Blanking
-
-The blank is its own step with its own verdict, the way the technician works at
-the bench: mark the water spots, read them, look at the grid, and only then
-quantify.
-
-![The blank grid with one bad spot](docs/img/blanking-invalid.png)
-
-Each blank well shows one of four things:
-
-| | |
-|---|---|
-| white | not part of the blank |
-| **blue** | marked, not read yet |
-| **green** | read, and it agrees with the others |
-| **red** | read, and it does not agree -- this is the spot to wipe |
-
-Beside the grid are the four fields Gen5 prints: date, time, `VALIDO` /
-`NO VALIDO`, and the CV%. **Samples cannot be read while the blank is not
-valid** -- the button is disabled rather than failing afterwards.
-
-There are two ways out of a bad blank, and the line under the grids says which
-one applies:
-
-- **One well is red.** Click it to discard it. The blank is recomputed from the
-  rest without re-reading anything, and clicking again puts it back.
-- **Nothing is red but the wells still disagree.** No single well can be blamed,
-  so there is nothing to discard: wipe the plate and blank again. `Reiniciar`
-  throws away the readings *and* the marks, which is what Gen5 calls Reset
-  Blanks.
-
-Marking a new well after a read suspends the blank until it is read too: half a
-blank, part measured and part not, must never be subtracted from anybody's
-samples.
-
-### Where the two limits come from
-
-A blank fails if any single well sits more than **0.003 AU** from the median of
-the others, or if the wells together span more than **0.004 AU**. Both are
-measured after the 320 nm correction, because what gets subtracted from every
-sample is the difference, not the raw reading.
-
-**These two numbers are this project's own, not Gen5's.** Gen5 shows a verdict
-but never says what it tests, and we have no export of a blanking run it
-rejected, so there was nothing to reverse-engineer. They are set from the one
-run we know Gen5 *passed* -- the eight wells of `Gen5_LVA_NAQ_0001`, which span
-0.002 AU with the worst well 0.0015 AU from the median -- so a blank that good
-keeps about twice the room it actually needed. Both are in `epoch_open.json`:
-
-    "blank_spread_limit_au": 0.004,
-    "blank_divergence_limit_au": 0.003
-
-A lab that finds them too strict or too slack can move them without a rebuild.
-If they ever turn out to redden wells on blanks that are genuinely fine, that is
-the file to edit, and worth telling us about.
-
-`docs/BLANK_THRESHOLD.md` is the bench procedure that would replace this guess
-with a measurement: a dilution series spiked into one blank well, run through
-Gen5 until it refuses, which brackets the threshold Gen5 actually enforces. It
-needs a machine that still has the Gen5 trial. It has not been run yet.
-
-The CV% is computed the way Gen5 reports it, on the raw absorbances per
-wavelength, because that is the number the technician is used to reading. It is
-*not* what the program gates on -- the spread above is -- and it will not match
-Gen5 to the last digit: the exported absorbances are rounded to three decimals,
-which on a ~0.045 blank moves a recomputed CV by more than the gap between the
-two standard-deviation conventions, so the file cannot even say which one Gen5
-used. Expect agreement to a few tenths of a percentage point.
-
-## Blanking
-
-The blank is its own step with its own verdict, the way the technician works at
-the bench: mark the water spots, read them, look at the grid, and only then
-quantify.
-
-![The blank grid with one bad spot](docs/img/blanking-invalid.png)
-
-Each blank well shows one of four things:
-
-| | |
-|---|---|
-| white | not part of the blank |
-| **blue** | marked, not read yet |
-| **green** | read, and it agrees with the others |
-| **red** | read, and it does not agree -- this is the spot to wipe |
-
-Beside the grid are the four fields Gen5 prints: date, time, `VALIDO` /
-`NO VALIDO`, and the CV%. **Samples cannot be read while the blank is not
-valid** -- the button is disabled rather than failing afterwards.
-
-There are two ways out of a bad blank, and the line under the grids says which
-one applies:
-
-- **One well is red.** Click it to discard it. The blank is recomputed from the
-  rest without re-reading anything, and clicking again puts it back.
-- **Nothing is red but the wells still disagree.** No single well can be blamed,
-  so there is nothing to discard: wipe the plate and blank again. `Reiniciar`
-  throws away the readings *and* the marks, which is what Gen5 calls Reset
-  Blanks.
-
-Marking a new well after a read suspends the blank until it is read too: half a
-blank, part measured and part not, must never be subtracted from anybody's
-samples.
-
-### Where the two limits come from
-
-A blank fails if any single well sits more than **0.003 AU** from the median of
-the others, or if the wells together span more than **0.004 AU**. Both are
-measured after the 320 nm correction, because what gets subtracted from every
-sample is the difference, not the raw reading.
-
-**These two numbers are this project's own, not Gen5's.** Gen5 shows a verdict
-but never says what it tests, and we have no export of a blanking run it
-rejected, so there was nothing to reverse-engineer. They are set from the one
-run we know Gen5 *passed* -- the eight wells of `Gen5_LVA_NAQ_0001`, which span
-0.002 AU with the worst well 0.0015 AU from the median -- so a blank that good
-keeps about twice the room it actually needed. Both are in `epoch_open.json`:
-
-    "blank_spread_limit_au": 0.004,
-    "blank_divergence_limit_au": 0.003
-
-A lab that finds them too strict or too slack can move them without a rebuild.
-If they ever turn out to redden wells on blanks that are genuinely fine, that is
-the file to edit, and worth telling us about.
-
-The CV% is computed the way Gen5 reports it, on the raw absorbances per
-wavelength, because that is the number the technician is used to reading. It is
-*not* what the program gates on -- the spread above is -- and it will not match
-Gen5 to the last digit: the exported absorbances are rounded to three decimals,
-which on a ~0.045 blank moves a recomputed CV by more than the gap between the
-two standard-deviation conventions, so the file cannot even say which one Gen5
-used. Expect agreement to a few tenths of a percentage point.
-
 ## Running it today
 
     python3 run_take3.py            nucleic acids on a Take3 plate
@@ -312,12 +176,9 @@ used. Expect agreement to a few tenths of a percentage point.
 
 **Without an instrument it will not produce numbers.** The window opens, the plate
 can be laid out and a saved file can be reopened, but the read buttons are greyed
-out and an amber badge says to switch the reader on. It used to fall back to a
-built-in simulator, which meant an Epoch that was merely switched off gave a screen
-full of invented values behind a warning banner — one misread banner away from
-simulated figures in a lab notebook.
+out and an amber badge says to switch the reader on. 
 
-The simulator is still there for development and for reviewing the screen without
+There's a built-in simulator for development and for reviewing the screen without
 hardware, but it has to be asked for, and anything it produces is labelled
 simulated on screen and inside any file it saves:
 
@@ -353,4 +214,3 @@ reading is disabled again, rather than quietly reverting to simulated numbers.
     docs/MULTISPECTRAL.md  how the curve program works and what it refuses
     docs/CAPTURE.md        how to capture the protocol from the running Gen5
     docs/FINDINGS.md       what the original instrument disks established
-    captures/             (empty) .pcapng files and Gen5 reference numbers go here
