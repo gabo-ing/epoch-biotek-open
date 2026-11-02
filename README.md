@@ -1,7 +1,8 @@
-# Epoch + TAKE3 - open software
+# Epoch Multispectral + TAKE3 - open software
 
-Free MultiOS replacement software for a BioTek Epoch microplate spectrophotometer with a Take3
-micro-volume plate, for RNA/DNA quantification.
+Free MultiOS replacement software for a BioTek Epoch microplate spectrophotometer:
+RNA/DNA quantification on a Take3 micro-volume plate, and colorimetric assays
+against a standard curve in ordinary transparent 96-well plates.
 
 Inspiration: Our lab owns the instrument but vendor software's licence activations were exhausted. As the instrument was not usable without the software, a new program was written. This program talks to the reader directly AND can be used on Linux/Windows
 
