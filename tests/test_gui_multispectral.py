@@ -343,8 +343,10 @@ class TestWhatTheScreenSays:
         try:
             warning = gui_curve.TEXT["take3_warning"]
             assert "Take3" in warning
-            assert "acido" in warning.lower()
-            assert "plastico" in warning.lower()
+            # The consequence, which is what stops someone, and the
+            # alternative, which is what they do instead.
+            assert "irreversible" in warning.lower()
+            assert "transparentes" in warning.lower()
         finally:
             app.destroy()
 

@@ -63,9 +63,13 @@ TEXT = {
                        "segundos: el programa lo detecta solo."),
     "lost": "EL LECTOR NO RESPONDE - comprueba que sigue encendido.",
 
-    "take3_warning": ("NO uses la placa Take3 en este ensayo. El reactivo de "
-                      "Salkowski lleva acido y arruinaria los pozos de cuarzo. "
-                      "Usa una placa de plastico transparente de 96 pozos."),
+    # Gabo's wording, verbatim. It says what happens rather than why the
+    # chemistry causes it, which is the part that makes someone put the plate
+    # down. Accented, unlike most of the text here: that was habit rather than
+    # a constraint, and the interface already carries non-ASCII elsewhere.
+    "take3_warning": ("NO uses la placa Take3 para este tipo de mediciones. "
+                      "La placa podría dañarse de forma irreversible. "
+                      "Utiliza sólo placas de plástico transparentes"),
 
     "plate": "Placa de 96 pozos",
     "roles": "Que estoy marcando:",
