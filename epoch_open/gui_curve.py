@@ -143,9 +143,18 @@ TEXT = {
     # of both: a refusal with no reason. Gabo read a blank, found every other
     # button still dead, and asked what was wrong -- nothing was.
     "next_mark_blank": "Marca los pozos del blanco de reactivo.",
+    # The opening line, with nothing marked at all. It has to offer both
+    # paths: this module is a spectrophotometer that can also build a curve,
+    # not a curve tool that refuses to read.
+    "next_empty_plate": ("Marca pozos de muestra para leer absorbancia, o "
+                         "empieza por el blanco si quieres concentraciones."),
     "next_read_blank": "Ahora pulsa '1. Leer blanco'.",
     "next_mark_standards": ("Marca al menos {need} pozos como patron "
-                            "(llevas {have})."),
+                            "(llevas {have}), o lee las muestras tal cual "
+                            "para obtener solo absorbancia."),
+    "next_plain_read": ("Marca pozos de muestra y pulsa '3. Leer muestras' "
+                        "para leer absorbancia. Para concentraciones, marca "
+                        "antes al menos {need} patrones."),
     "next_concentrations": ("Doble clic en cada patron para escribir su "
                             "concentracion. Faltan: {wells}."),
     "next_read_standards": "Ahora pulsa '2. Leer patrones'.",
@@ -681,8 +690,11 @@ class App(ScreenFit, tk.Tk):
         enabled = {
             "read_blank": can_read and bool(self._wells_for(BLANK)),
             "read_standards": can_read and self._can_fit(),
-            "read_samples": (can_read and self._curve_ok()
-                             and bool(self._wells_for(SAMPLE))),
+            # No curve required. Without one this reads absorbances, which
+            # is what the instrument does and what Gen5 offers before any
+            # data reduction is set up. A concentration still needs a usable
+            # curve; that check is in curve.read_against.
+            "read_samples": can_read and bool(self._wells_for(SAMPLE)),
             "end_batch": bool(self.results),
             "scan": can_read,
             "clear": True,
@@ -731,13 +743,27 @@ class App(ScreenFit, tk.Tk):
         if self._wavelengths() is None:
             return TEXT["next_bad_wavelength"]
 
+        # A sample marked and nothing else means she wants a plain read, and
+        # that needs neither a blank nor standards. Saying so beats sending
+        # her to fetch a curve she may not want.
+        if (self._wells_for(SAMPLE) and not self._wells_for(STANDARD)
+                and self.fit is None):
+            if self.results:
+                return TEXT["next_save"]
+            return TEXT["next_read_samples"]
+
         if self.blank_value is None:
+            if not self.roles:
+                return TEXT["next_empty_plate"]
             if not self._wells_for(BLANK):
                 return TEXT["next_mark_blank"]
             return TEXT["next_read_blank"]
 
         standards = self._wells_for(STANDARD)
         if len(standards) < curve.MIN_STANDARDS:
+            if not standards:
+                return TEXT["next_plain_read"].format(
+                    need=curve.MIN_STANDARDS)
             return TEXT["next_mark_standards"].format(
                 need=curve.MIN_STANDARDS, have=len(standards))
         missing = self._missing_concentrations()
@@ -888,12 +914,6 @@ class App(ScreenFit, tk.Tk):
 
     def _read_samples(self) -> None:
         wells = self._wells_for(SAMPLE)
-        if not self._curve_ok():
-            reason = "\n".join(str(n) for n in (self.fit.notes if self.fit
-                                                else ())) or TEXT["no_curve_yet"]
-            messagebox.showinfo(TEXT["title"],
-                                TEXT["curve_not_usable"].format(reason=reason))
-            return
         if not wells:
             messagebox.showinfo(TEXT["title"], TEXT["no_sample_wells"])
             return
@@ -912,8 +932,12 @@ class App(ScreenFit, tk.Tk):
             fresh = [
                 curve.read_against(
                     well, raw[well], self.fit, wavelength=nm,
-                    reference_nm=reference, blank=self.blank_value,
+                    reference_nm=reference,
+                    # No blank read means nothing is subtracted, rather than
+                    # nothing being read.
+                    blank=self.blank_value or 0.0,
                     name=self.names.get(well, ""),
+                    unit=self.unit.get(),
                 )
                 for well in wells
             ]
@@ -970,7 +994,8 @@ class App(ScreenFit, tk.Tk):
                 result.name or result.well,
                 result.well,
                 f"{result.absorbance:.4f}".replace(".", ","),
-                f"{result.concentration:.2f}".replace(".", ","),
+                ("-" if result.concentration is None
+                 else f"{result.concentration:.2f}".replace(".", ",")),
                 notes,
             ))
 
@@ -991,6 +1016,7 @@ class App(ScreenFit, tk.Tk):
         try:
             written = export_curve(
                 path, self.results, self.fit, wavelengths,
+                unit=self.unit.get(),
                 metadata={
                     "Longitud de onda": f"{wavelengths[0]} nm",
                     "Referencia": (f"{self._reference_nm()} nm"

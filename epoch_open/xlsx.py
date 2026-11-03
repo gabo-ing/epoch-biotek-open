@@ -325,16 +325,22 @@ CURVE_FIT_WIDTHS = [10, 22, 13, 12]
 
 
 def curve_to_summary(results, unit: str) -> list[list]:
-    """The samples, one row each, named if they were named."""
+    """The samples, one row each, named if they were named.
+
+    A well read without a usable curve has an absorbance and no
+    concentration, and the cell is left empty rather than filled with a zero
+    that would read as a measurement.
+    """
     rows = [list(CURVE_SUMMARY_HEADERS)]
     for result in results:
+        quantified = result.concentration is not None
         rows.append([
             result.name or result.well,
             result.well,
             round(result.absorbance, 4),
-            round(result.concentration, 3),
-            unit,
-            "si" if result.in_range else "NO",
+            round(result.concentration, 3) if quantified else "",
+            unit if quantified else "",
+            ("si" if result.in_range else "NO") if quantified else "",
             "  ".join(str(n) for n in result.notes),
         ])
     return rows
@@ -380,7 +386,7 @@ def curve_to_detail(results, fit, wavelengths) -> list[list]:
     """
     wavelengths = list(wavelengths)
     rows = [["Pozo", "Rol"] + [f"{nm} nm" for nm in wavelengths]]
-    for standard in fit.standards:
+    for standard in (fit.standards if fit is not None else ()):
         rows.append([standard.well, "patron"] + [""] * len(wavelengths))
     for result in results:
         rows.append(
@@ -391,22 +397,29 @@ def curve_to_detail(results, fit, wavelengths) -> list[list]:
     return rows
 
 
-def export_curve(path, results, fit, wavelengths, metadata: dict | None = None):
-    """Write the three sheets a curve assay needs to be checkable later."""
-    summary = curve_to_summary(results, fit.unit)
+def export_curve(path, results, fit, wavelengths, metadata: dict | None = None,
+                 unit: str = ""):
+    """Write what the run produced.
+
+    Three sheets when there was a curve, two when there was not: a plain
+    plate read has absorbances and no curve to record, and a Curva sheet
+    describing nothing would be worse than its absence.
+    """
+    summary = curve_to_summary(results, fit.unit if fit else unit)
 
     summary.append([])
     summary.append(["Leido el", datetime.now().strftime("%Y-%m-%d %H:%M")])
-    summary.append(["r2 de la curva", round(fit.r_squared, 6)])
-    summary.append(["Patrones", fit.n])
+    if fit is not None:
+        summary.append(["r2 de la curva", round(fit.r_squared, 6)])
+        summary.append(["Patrones", fit.n])
+    else:
+        summary.append(["Curva", "ninguna: lectura directa en absorbancia"])
     for key, value in (metadata or {}).items():
         summary.append([key, value])
 
-    return write_workbook(
-        path,
-        [
-            ("Resumen", summary, CURVE_SUMMARY_WIDTHS),
-            ("Curva", curve_to_fit_sheet(fit), CURVE_FIT_WIDTHS),
-            ("Detalle", curve_to_detail(results, fit, wavelengths), None),
-        ],
-    )
+    sheets = [("Resumen", summary, CURVE_SUMMARY_WIDTHS)]
+    if fit is not None:
+        sheets.append(("Curva", curve_to_fit_sheet(fit), CURVE_FIT_WIDTHS))
+    sheets.append(
+        ("Detalle", curve_to_detail(results, fit, wavelengths), None))
+    return write_workbook(path, sheets)

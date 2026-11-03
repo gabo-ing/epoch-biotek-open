@@ -74,13 +74,29 @@ class TestItRefusesRatherThanGuesses:
         assert not fit.usable
         assert "slope" in [n.code for n in fit.notes]
 
-    def test_nothing_can_be_read_off_an_unusable_curve(self):
+    def test_no_concentration_comes_off_an_unusable_curve(self):
+        """The measurement survives; the interpretation does not.
+
+        This used to raise, which refused the reading as well as the
+        concentration. Gen5 reads a plate with no blank and no standards at
+        all, and so does this now: the absorbance is a measurement either
+        way. What must never happen is a number in the concentration column
+        that came off a curve running backwards.
+        """
         fit = curve.fit_standards(series([(0, 0.9), (10, 0.5), (20, 0.1)]))
-        try:
-            curve.read_against("B1", {530: 0.3}, fit)
-        except curve.CurveError:
-            return
-        raise AssertionError("a sample was read off a backwards curve")
+        result = curve.read_against("B1", {530: 0.3}, fit)
+        assert result.concentration is None
+        assert abs(result.absorbance - 0.3) < 1e-9
+
+    def test_a_plain_read_needs_no_curve_at_all(self):
+        result = curve.read_against("B1", {530: 0.42})
+        assert result.concentration is None
+        assert abs(result.absorbance - 0.42) < 1e-9
+
+    def test_a_plain_read_needs_no_blank(self):
+        """Nothing subtracted means raw, not refused."""
+        result = curve.read_against("B1", {530: 0.42})
+        assert abs(result.absorbance - 0.42) < 1e-9
 
     def test_a_flat_curve_scores_zero_rather_than_a_perfect_fit(self):
         """Identical absorbances fit a flat line exactly; r2 is 0/0.

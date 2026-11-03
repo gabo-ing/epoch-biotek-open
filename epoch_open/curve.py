@@ -261,12 +261,20 @@ class Fit:
 
 @dataclass
 class CurveResult:
-    """One unknown well, read against the curve."""
+    """One well that was read.
+
+    `concentration` is None when there was no usable curve to read it
+    against. The absorbance is still a measurement and still worth keeping --
+    Gen5 will happily read a plate with no blank and no standards at all, and
+    refusing to is an obstruction rather than a safeguard. What must never
+    happen is a concentration derived from a curve that does not support it,
+    which is why this is None rather than a number with a warning attached.
+    """
 
     well: str
     name: str
     absorbance: float
-    concentration: float
+    concentration: float | None
     unit: str
     raw: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)
@@ -373,20 +381,35 @@ def fit_standards(standards, unit: str = DEFAULT_UNIT) -> Fit:
 def read_against(
     well: str,
     readings: dict,
-    fit: Fit,
+    fit: Fit | None = None,
     wavelength: int = DEFAULT_NM,
     reference_nm: int | None = None,
     blank: float = 0.0,
     name: str = "",
+    unit: str = DEFAULT_UNIT,
 ) -> CurveResult:
-    """Turn one unknown well's readings into a concentration off the curve."""
-    if not fit.usable:
-        raise CurveError(
-            "the curve is not usable, so nothing can be read against it")
+    """One well's reading, as a concentration if a curve supports it.
 
+    With `fit=None`, or a fit that is not usable, this returns the absorbance
+    and no concentration. That is a plain plate read, which is what the
+    instrument does and what Gen5 offers before any data reduction is
+    configured: blanks and standards are how you turn absorbance into
+    something else, not a toll to be paid before measuring at all.
+
+    `blank` is likewise optional. Passing 0.0 means nothing is subtracted,
+    and the absorbance is raw.
+    """
     absorbance = corrected(readings, wavelength, reference_nm) - blank
-    concentration = fit.concentration_for(absorbance)
     notes = []
+
+    if fit is None or not fit.usable:
+        return CurveResult(
+            well=well, name=name, absorbance=absorbance,
+            concentration=None, unit=unit,
+            raw=dict(readings), notes=notes,
+        )
+
+    concentration = fit.concentration_for(absorbance)
 
     if absorbance > fit.top:
         notes.append(note("above_range", absorbance=absorbance, top=fit.top))

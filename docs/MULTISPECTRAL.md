@@ -104,6 +104,32 @@ silently wrong answers for everything read against it. So the fit is reported
 with its slope, intercept, r², worst residual and measurable range, on screen
 and in the workbook, rather than as a pass mark.
 
+## It is a spectrophotometer first
+
+The blank and the standards are optional. Mark wells as samples, press
+**Leer muestras**, and you get absorbances -- no blank, no standards, no
+curve. That is what the instrument does, and what Gen5 offers before any
+data reduction is configured.
+
+This program used to refuse. A sample could not be read until a usable curve
+existed, which made taking a measurement conditional on having an
+interpretation for it. Gabo put the distinction plainly: the Take3 side
+genuinely needs a blank, because a nucleic-acid concentration is
+Beer-Lambert applied to a blank-corrected absorbance and there is nothing to
+report without one -- but this module should work as a spectrophotometer,
+which reads.
+
+What is still guaranteed is narrower and is the part worth keeping: **a
+concentration is never reported from a curve that cannot support it.** With
+no curve, or a curve that fails its checks, the concentration comes back
+empty rather than as a number with a warning beside it. The table shows a
+dash; the workbook leaves the cell blank and records "ninguna: lectura
+directa en absorbancia", so a raw read can never be mistaken later for a
+quantified one. A run without a curve exports two sheets instead of three,
+because a Curva sheet describing nothing is worse than no Curva sheet.
+
+Adding standards upgrades the answer rather than unlocking it.
+
 ## The four steps
 
 Marked wells take a role — blank, standard or sample — chosen with the three

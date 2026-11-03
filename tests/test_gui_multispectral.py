@@ -119,7 +119,12 @@ class TestThePlate:
 
 class TestTheStepsOpenInOrder:
 
-    def test_nothing_but_the_blank_is_available_at_the_start(self):
+    def test_the_steps_that_need_something_first_are_shut(self):
+        """Standards need a blank; saving needs a result.
+
+        Reading samples does not need either, because an absorbance is a
+        measurement on its own -- see TestAPlainReadNeedsNothing.
+        """
         app = _app()
         if app is None:
             return
@@ -127,7 +132,6 @@ class TestTheStepsOpenInOrder:
             _loaded(app)
             assert _state(app, "read_blank") == "normal"
             assert _state(app, "read_standards") == "disabled"
-            assert _state(app, "read_samples") == "disabled"
             assert _state(app, "end_batch") == "disabled"
         finally:
             app.destroy()
@@ -144,17 +148,22 @@ class TestTheStepsOpenInOrder:
         finally:
             app.destroy()
 
-    def test_samples_wait_for_a_usable_curve(self):
+    def test_a_curve_turns_absorbances_into_concentrations(self):
+        """Without one the samples still read; they just read in AU."""
         app = _app()
         if app is None:
             return
         try:
-            _loaded(app)
+            _loaded(app, samples=("A3",))
             app._read_blank()
-            assert _state(app, "read_samples") == "disabled"
+            app._read_samples()
+            assert app.results[-1].concentration is None, (
+                "a concentration appeared with no curve behind it")
+
             app._read_standards()
             assert app.fit is not None and app.fit.usable
-            assert _state(app, "read_samples") == "normal"
+            app._read_samples()
+            assert app.results[-1].concentration is not None
         finally:
             app.destroy()
 
@@ -214,7 +223,12 @@ class TestTheCurveIsThrownAwayWhenItStopsApplying:
             assert app.fit is not None
             _mark(app, gui_curve.STANDARD, ["A2"])     # unmark one standard
             assert app.fit is None
-            assert _state(app, "read_samples") == "disabled"
+            # Samples can still be read -- they just come back in absorbance,
+            # because there is no longer a curve to interpret them with.
+            app.role.set(gui_curve.SAMPLE)
+            app._click_well("A3")
+            app._read_samples()
+            assert app.results[-1].concentration is None
         finally:
             app.destroy()
 
@@ -598,5 +612,121 @@ class TestItSaysWhatIsMissing:
             return
         try:
             assert "lector" in app.next_label.cget("text").lower()
+        finally:
+            app.destroy()
+
+
+class TestAPlainReadNeedsNothing:
+    """The instrument reads. Everything else is optional.
+
+    Gabo put it plainly on 3 November 2026: the Take3 definitely needs a
+    blank -- a nucleic-acid concentration comes from Beer-Lambert on a
+    blank-corrected absorbance, so without one there is nothing to report --
+    but this module should work as a spectrophotometer, which reads.
+
+    Gen5 agrees: an absorbance endpoint read needs no blank, no standards and
+    no data reduction configured at all. This program used to require a
+    usable curve before it would read a sample, which made a measurement
+    conditional on an interpretation of it.
+
+    The guarantee that survives is narrower and the one that matters: a
+    concentration is never reported from a curve that cannot support it. It
+    comes back as None instead, and the column is left empty.
+    """
+
+    def test_samples_read_with_nothing_else_marked(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            _mark(app, gui_curve.SAMPLE, ["A1", "B1"])
+            app._refresh_state()
+            assert _state(app, "read_samples") == "normal", (
+                "a plain read was refused")
+            app._read_samples()
+            assert len(app.results) == 2
+        finally:
+            app.destroy()
+
+    def test_what_comes_back_is_absorbance_and_no_concentration(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            app._read_samples()
+            result = app.results[-1]
+            assert result.absorbance > 0
+            assert result.concentration is None, (
+                "a concentration appeared with no curve behind it")
+        finally:
+            app.destroy()
+
+    def test_the_table_shows_a_dash_rather_than_a_zero(self):
+        """A zero would read as a measured concentration of nothing."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            app._read_samples()
+            row = app.table.get_children()[-1]
+            values = app.table.item(row, "values")
+            assert values[3] == "-", f"concentration cell was {values[3]!r}"
+        finally:
+            app.destroy()
+
+    def test_the_guidance_offers_the_plain_read(self):
+        """It must not send her off to build a curve she does not want."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            app._refresh_state()
+            first = app.next_label.cget("text").lower()
+            assert "muestra" in first
+
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            assert "leer muestras" in app.next_label.cget("text").lower()
+        finally:
+            app.destroy()
+
+    def test_a_blank_is_still_subtracted_when_there_is_one(self):
+        """Optional does not mean ignored."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            app._read_samples()
+            raw = app.results[-1].absorbance
+
+            app.results.clear()
+            _mark(app, gui_curve.BLANK, ["A2", "B2"])
+            app._read_blank()
+            assert app.blank_value is not None
+            app._read_samples()
+            corrected = app.results[-1].absorbance
+
+            assert abs(raw - corrected - app.blank_value) < 0.02, (
+                "the blank was not subtracted once it existed")
+        finally:
+            app.destroy()
+
+    def test_a_curve_still_quantifies_when_there_is_one(self):
+        """The two modes coexist; adding standards upgrades the answer."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            _loaded(app, samples=("A3",))
+            app._read_blank()
+            app._read_standards()
+            app._read_samples()
+            assert app.results[-1].concentration is not None
         finally:
             app.destroy()
