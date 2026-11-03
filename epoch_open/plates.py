@@ -37,6 +37,37 @@ class PlateGeometry:
     size_x: float
     size_z: float
 
+    def indices_for(self, well: str) -> tuple[int, int]:
+        """'C3' -> (3, 3): 1-based row and column, as the reader addresses them.
+
+        Validated against this geometry rather than against the Take3's spot
+        list. Both plates are declared to the reader as 8 x 12 -- the Take3's
+        micro-spots sit at ordinary 96-well positions, which is why it is
+        addressed as a 12-column plate with only columns 2 and 3 in use -- so
+        the reader can address any of the 96 positions on either.
+
+        take3.well_to_indices does the same arithmetic and then refuses
+        anything outside columns 2 and 3, which is right when the question is
+        "is there a micro-spot there" and wrong when it is "can the optics be
+        pointed there". Using it for the latter made a flat 96-well plate
+        unreadable: the first real read of one raised "column 1 is not one of
+        (2, 3)" before the carriage moved.
+        """
+        letter, number = well[0].upper(), well[1:]
+        row = ord(letter) - ord("A") + 1
+        if not 1 <= row <= self.rows:
+            raise ValueError(
+                f"{well}: row {letter!r} is outside this plate's {self.rows}")
+        try:
+            column = int(number)
+        except ValueError:
+            raise ValueError(f"{well}: {number!r} is not a column number")
+        if not 1 <= column <= self.columns:
+            raise ValueError(
+                f"{well}: column {column} is outside this plate's "
+                f"{self.columns}")
+        return row, column
+
     def to_command(self) -> str:
         """The parameter for the 'y' (set plate) command, ETX included."""
         return (

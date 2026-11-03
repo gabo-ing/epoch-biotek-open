@@ -160,6 +160,53 @@ reference number: an empty plate of this type read in `epoch-multispectral`
 should land in the same place, and if it does not, the flat-plate geometry is
 wrong.
 
+## epoch-multispectral's first read, 3 November 2026
+
+The same plate, empty, read on the same instrument minutes apart. Gen5 at
+560 nm against `epoch-multispectral` at 560 nm, all 96 wells:
+
+| | |
+|---|---|
+| wells identical to three decimals | **85 of 96 (89%)** |
+| largest disagreement | 0.0010 AU -- one last-digit step |
+| mean signed difference | -0.00005 AU |
+| mean absorbance | 0.0472 both |
+
+The eleven differing wells differ by exactly one digit, scattered in both
+directions, which is what two separate reads of the same plate look like on
+an instrument whose own noise is about 0.001 AU. There is no offset between
+the programs.
+
+**What this does and does not prove.** It proves the read path works end to
+end against real hardware: the plate-setting command for a non-Take3
+geometry, the multi-wavelength assembly, the response parsing, and the
+numbers that come out. It does **not** prove the wells are addressed
+correctly, because an empty plate is uniform -- a geometry off by a whole
+column would read 0.047 everywhere and look perfect. That needs a pattern;
+see the L-shape test in `docs/MULTISPECTRAL.md`.
+
+It also cost 156 seconds for 96 wells at three wavelengths, which is worth
+knowing before anyone waits on it with reagents developing.
+
+### The bug it found immediately
+
+The first attempt did not reach the carriage:
+
+    ValueError: column 1 is not one of (2, 3)
+
+`read_plate` converted well names with `take3.well_to_indices`, which refuses
+any column but the Take3's. A flat 96-well plate was unreadable, and none of
+the 345 tests saw it, because the simulator has its own `read_plate` that
+never touches the conversion. Every test of the colorimetric program ran past
+the broken line.
+
+Addressing is now done by the geometry, which both plates declare as 8 x 12 --
+the Take3's spots sit at ordinary 96-well positions, which is exactly why it
+is addressed as a 12-column plate with two columns in use. `take3`'s own
+mapping is still there and still refuses A1, because it answers a different
+question: not "can the optics be pointed there" but "is there a micro-spot
+there". `tests/test_plate_addressing.py` pins both.
+
 ## What is still worth doing on the trial laptop
 
 The blanking experiment in `docs/BLANK_THRESHOLD.md` has lost most of its

@@ -591,7 +591,9 @@ class EpochReader(ReaderBackend):
         return self._parse_body(body)
 
     @staticmethod
-    def bounding_rectangle(wells: list[str]) -> tuple[int, int, int, int]:
+    def bounding_rectangle(
+        wells: list[str], geometry=TAKE3
+    ) -> tuple[int, int, int, int]:
         """The smallest rectangle of the plate containing every named spot.
 
         The reader reads rectangles, not arbitrary sets. Selecting C2 and F3 means
@@ -600,7 +602,7 @@ class EpochReader(ReaderBackend):
         """
         if not wells:
             raise ValueError("no wells selected")
-        indices = [take3.well_to_indices(w) for w in wells]
+        indices = [geometry.indices_for(w) for w in wells]
         rows = [r for r, _ in indices]
         columns = [c for _, c in indices]
         return min(rows), min(columns), max(rows), max(columns)
@@ -655,8 +657,9 @@ class EpochReader(ReaderBackend):
         if not self.supports(CAP_RDOP22):
             raise ReaderError("This reader does not support the RDOP22 read protocol.")
 
-        min_row, min_col, max_row, max_col = self.bounding_rectangle(wells)
-        wanted = {take3.well_to_indices(w): w for w in wells}
+        min_row, min_col, max_row, max_col = self.bounding_rectangle(
+            wells, geometry)
+        wanted = {geometry.indices_for(w): w for w in wells}
         ordered = sorted(set(wavelengths))
 
         self.set_plate(geometry)
