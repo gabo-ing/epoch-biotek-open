@@ -1,6 +1,21 @@
 # Measuring Gen5's blank threshold
 
-**Status: planned, not yet run.** Everything here is a procedure, not a result.
+**Status: largely superseded on 3 November 2026. Read `docs/GEN5_NOTES.md`
+first.**
+
+This document was written to measure a Gen5 constant experimentally. Gen5's
+own help files, read on 3 November, say there is no such constant: the
+blanking verdict is a **CV% check against a user-configurable limit**, a field
+called *Validation limit (CV%)* in the Take3 Preferences dialog. Whatever this
+procedure measured would have been that laptop's setting, discovered the
+expensive way.
+
+What replaces most of it: open the dialog and read the number.
+
+Parts of it still earn their keep, and they are marked below. The procedure is
+kept rather than deleted because the reasoning in it is still how you would
+attack a threshold that really was unknown -- and because being wrong in a
+recoverable way is worth leaving visible.
 
 > **Deadline: 25 November 2026.** Step 0 was done on 3 November 2026 -- the Gen5
 > trial on the Dell 7290 opens and reads, with 22 days left on it. After that
