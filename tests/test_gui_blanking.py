@@ -93,7 +93,8 @@ class TestTheGridSaysWhichSpotIsBad:
             _blanking(app, {"A2": 0.010, "B2": 0.0, "C2": 0.0, "D2": 0.0})
             assert _colour(app, "A2") == gui.BAD_WELL
             assert _colour(app, "B2") == gui.BLANK_WELL
-            assert _field(app, "state") == gui.TEXT["blank_state_invalid"]
+            # Gen5's own word for this case, photographed on 3 November 2026.
+            assert _field(app, "state") == gui.TEXT["blank_state_diverging"]
         finally:
             app.destroy()
 
@@ -151,7 +152,7 @@ class TestSamplesWaitForAGoodBlank:
 
             assert "A2" in app.blank
             assert _colour(app, "A2") == gui.BAD_WELL
-            assert _field(app, "state") == gui.TEXT["blank_state_invalid"]
+            assert _field(app, "state") == gui.TEXT["blank_state_diverging"]
         finally:
             app.destroy()
 
@@ -233,6 +234,8 @@ class TestTheStatusBlock:
         try:
             _blanking(app, {"A2": 0.0})
             assert _field(app, "cv") == "-"
+            # Not DIVERGENTE: one well does not diverge from anything. It
+            # cannot be judged at all, which is a different failure.
             assert _field(app, "state") == gui.TEXT["blank_state_invalid"]
             assert app.blank_label.cget("text") == gui.TEXT["blank_why_single"]
         finally:

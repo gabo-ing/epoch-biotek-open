@@ -237,3 +237,65 @@ class TestTheTwoLimitsTogether:
         assert report.valid
         assert max(report.cv_percent.values()) < quant.BLANK_CV_LIMIT_PERCENT
         assert quant.BLANK_CV_LIMIT_PERCENT == 10.0
+
+
+class TestTheBlankingGen5Rejected:
+    """The run Gabo photographed on 3 November 2026.
+
+    Two clean Take3 spots and two deliberately smudged ones. Gen5 reported
+    Status DIVERGING, CV% 29,242, and painted exactly the two smudged wells
+    red while the clean pair stayed green.
+
+    That screenshot is the only evidence this project has of Gen5 *rejecting*
+    a blanking, and it caught a real bug the moment it arrived: the rule here
+    measured each well's distance from the median, and with the wells in two
+    groups the median lands in the gap between them, so all four came out
+    red. The technician would have been told to wipe two spots that were fine.
+    """
+
+    def well(self, name, a260):
+        return RawWell(name, {260: a260, 280: a260 * 0.95, 320: 0.040})
+
+    def split(self):
+        """Two clean wells and two smudged, as in the photograph."""
+        return {"A2": self.well("A2", 0.046), "A3": self.well("A3", 0.047),
+                "B2": self.well("B2", 0.085), "B3": self.well("B3", 0.090)}
+
+    def test_only_the_smudged_wells_are_painted_red(self):
+        report = blank_report(self.split())
+        assert report.divergent == ("B2", "B3"), (
+            "the clean wells must stay green; Gen5 left them green")
+
+    def test_the_blanking_is_refused(self):
+        report = blank_report(self.split())
+        assert not report.valid
+        assert report.reason == "cv"
+
+    def test_a_cv_this_far_out_is_nowhere_near_the_limit(self):
+        """Gen5 printed 29,242% against its limit of 10."""
+        report = blank_report(self.split())
+        assert report.cv_percent[260] > quant.BLANK_CV_LIMIT_PERCENT * 2
+
+    def test_discarding_what_is_red_leaves_a_blank_that_passes(self):
+        """The red set is a promise: drop these and the rest agree.
+
+        If that were not true the colour would be decoration. It is the whole
+        meaning of the hint beside Gen5's grid -- discard the diverging wells.
+        """
+        blanks = self.split()
+        report = blank_report(blanks)
+        kept = {w: b for w, b in blanks.items() if w not in report.divergent}
+        assert len(kept) >= 2
+        assert blank_report(kept).valid
+
+    def test_a_single_bad_spot_among_four_names_only_that_one(self):
+        blanks = {"A2": self.well("A2", 0.046), "A3": self.well("A3", 0.047),
+                  "B2": self.well("B2", 0.046), "B3": self.well("B3", 0.090)}
+        assert blank_report(blanks).divergent == ("B3",)
+
+    def test_a_good_blanking_reddens_nothing(self):
+        blanks = {n: self.well(n, 0.046 + i * 0.0005)
+                  for i, n in enumerate(("A2", "A3", "B2", "B3"))}
+        report = blank_report(blanks)
+        assert report.valid
+        assert report.divergent == ()

@@ -110,6 +110,10 @@ TEXT = {
     "blank_state_unread": "SIN LEER",
     "blank_state_valid": "VALIDO",
     "blank_state_invalid": "NO VALIDO",
+    # Gen5's own word for a blanking whose wells disagree, kept so the two
+    # programs say the same thing about the same plate. Seen on 3 November
+    # 2026 beside a CV% of 29,242 with two wells painted red.
+    "blank_state_diverging": "DIVERGENTE",
     "blank_field_date": "Fecha:",
     "blank_field_time": "Hora:",
     "blank_field_state": "Estado:",
@@ -660,15 +664,21 @@ class App(ScreenFit, tk.Tk):
         self.blank_fields["time"].configure(text=when.strftime("%H:%M:%S"))
 
         ok = self._blank_ok()
+        if ok:
+            state = TEXT["blank_state_valid"]
+        elif self.blank_report is not None and self.blank_report.reason == "cv":
+            # Gen5 distinguishes this case by name, so we do too.
+            state = TEXT["blank_state_diverging"]
+        else:
+            state = TEXT["blank_state_invalid"]
         self.blank_fields["state"].configure(
-            text=TEXT["blank_state_valid"] if ok else TEXT["blank_state_invalid"],
-            style="CardGood.TLabel" if ok else "CardBad.TLabel")
+            text=state, style="CardGood.TLabel" if ok else "CardBad.TLabel")
 
         # A CV needs at least two wells. Printing 0,00 for a single one would
         # read as perfect agreement rather than as nothing to compare.
         if self.blank_report and len(self.blank_report.wells) > 1:
             # Comma for the decimal mark, as Gen5 prints it here.
-            text = f"{self.blank_report.cv_260:.2f}".replace(".", ",") + "%"
+            text = f"{self.blank_report.cv_260:.3f}".replace(".", ",") + "%"
         else:
             text = "-"
         self.blank_fields["cv"].configure(text=text)

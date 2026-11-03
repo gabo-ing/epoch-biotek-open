@@ -505,6 +505,62 @@ class BlankReport:
         return self.cv_percent.get(260, 0.0)
 
 
+def wells_to_discard(
+    blanks: dict[str, RawWell],
+    cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
+) -> set[str]:
+    """Which wells would have to go for the rest to agree.
+
+    This is what Gen5 paints red, and the hint beside its grid says so: "you
+    can discard unnecessary / diverging blank wells". The red set is not an
+    opinion about which wells are odd-looking, it is the answer to a question
+    she is about to act on -- which spots do I throw away so this blanking
+    passes?
+
+    Found by dropping the well furthest from the mean, over and over, until
+    the CV% of what remains is inside the limit. Never below two wells, since
+    a single well has no CV% and discarding down to one would trade a bad
+    blank for an unjudgeable one.
+
+    The naive rule this replaced measured each well's distance from the
+    median, which breaks on exactly the case Gabo photographed on
+    3 November 2026: two clean spots and two smudged ones. The median lands in
+    the gap between the groups, every well is then far from it, and all four
+    were painted red -- telling her to wipe two spots that were fine. Gen5
+    reddened the two smudged wells and left the clean pair green.
+
+    Returns an empty set when no amount of discarding helps, which is the
+    honest answer that nothing in particular is to blame and the plate should
+    be blanked again.
+    """
+    if len(blanks) < 3:
+        # With two wells neither can be called the wrong one, and discarding
+        # either leaves a single well that cannot be judged at all.
+        return set()
+
+    kept = dict(blanks)
+    discarded: set[str] = set()
+
+    while len(kept) > 2:
+        cv = {w: blank_cv_percent(kept, w)
+              for w in set.intersection(*(set(b.readings) for b in kept.values()))}
+        if cv and max(cv.values()) <= cv_limit_percent:
+            return discarded
+
+        values = {name: well.corrected(260) for name, well in kept.items()}
+        centre = sum(values.values()) / len(values)
+        worst = max(values, key=lambda n: abs(values[n] - centre))
+        discarded.add(worst)
+        del kept[worst]
+
+    # Down to two wells and still failing: nothing to single out.
+    cv = {w: blank_cv_percent(kept, w)
+          for w in set.intersection(*(set(b.readings) for b in kept.values()))}
+    if cv and max(cv.values()) <= cv_limit_percent:
+        return discarded
+    return set()
+
+
 def blank_report(
     blanks: dict[str, RawWell],
     cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
@@ -536,8 +592,18 @@ def blank_report(
 
     wavelengths = sorted(set.intersection(*(set(b.readings) for b in blanks.values())))
     cv = {w: blank_cv_percent(blanks, w) for w in wavelengths}
-    divergent = divergent_blank_wells(blanks, divergence_limit_au)
     spread = blank_spread(blanks)
+
+    # Red means "discard this one and the rest agree" when the blanking has
+    # failed, which is what Gen5 shows and what she is about to do about it.
+    # When the CV% already passes there is nothing to discard, so the older
+    # distance-from-the-median rule is left to name a well that is visibly out
+    # of line anyway -- advice on a blanking that is otherwise fine.
+    failing = bool(cv) and max(cv.values()) > cv_limit_percent
+    if failing:
+        divergent = wells_to_discard(blanks, cv_limit_percent)
+    else:
+        divergent = divergent_blank_wells(blanks, divergence_limit_au)
 
     if len(blanks) < 2:
         # Gen5 requires two or more wells for "use blank average", and treats a
