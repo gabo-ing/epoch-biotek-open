@@ -42,15 +42,25 @@ correctly.
 
 ### Two things that fell out of it
 
-**A colourless liquid reads lower than air.** The allulose wells came back at
-0.0395 and 0.0390 against 0.0474 for the dry wells -- about 0.008 AU *below*
-empty, and flat across 530/560/590 as a non-absorbing solution should be.
-Filling a well changes its optics whether or not anything in it absorbs.
+**Something colourless in a well still changes the reading.** The allulose
+wells came back at 0.0395 and 0.0390 against 0.0474 for the dry wells --
+about 0.008 AU *below* empty, and flat across 530/560/590, as a non-absorbing
+solution should be.
 
-The practical consequence is for the assay, not the software: **every well
-must hold the same volume**, including blanks. An under-filled well is not
-merely missing sample, it reads as though it had absorbance of its own, in
-the direction that would look like *less* colour.
+Read carefully, because this is weaker evidence than it first looks. Those
+were a few unmeasured drops, not a filled well, so what it shows is that
+*some* liquid reads below *no* liquid. It says nothing about how the reading
+varies with volume, because a properly filled well was never read for
+comparison. In particular it does not establish which way a partly filled
+well errs.
+
+What survives is the direction and the reason: filling a well changes its
+optics whether or not the contents absorb. That is enough to justify the
+ordinary discipline of **keeping every well at the same volume, blanks
+included**, and enough to say that an empty or badly under-filled well will
+not read as a neutral zero. How large that error is at assay volumes is
+unmeasured, and would take one plate of water at 50, 100, 150 and 200 uL to
+settle if it ever mattered.
 
 It is also why water is a poor choice for this test. Water against air would
 have given roughly 0.008 AU in a counterintuitive direction; the coffee gave
