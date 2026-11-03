@@ -230,11 +230,16 @@ from this lab:
     RESIDUAL_LIMIT  = 0.10    one standard this far off the span is named
 
 0.98 is what a working standard curve is normally expected to clear and 0.99
-what a good one does. Unlike the Take3 blanking limits — see
-`docs/BLANK_THRESHOLD.md`, where there was a Gen5 verdict to calibrate against —
-there is no vendor behaviour to recover here, because Gen5's licence never
-reached this assay in this lab. These are ordinary analytical-chemistry
-conventions, and the code says so.
+what a good one does.
+
+The Take3 blanking limits stopped being conventions on 3 November 2026: the
+rule turned out to be written down in Gen5's own preferences, and this
+project now uses Gen5's number (`docs/BLANK_THRESHOLD.md`). There is no
+equivalent here. Gen5 does have curve fitting, with its own documented
+minimum standard counts and an extrapolation factor — see
+`docs/GEN5_NOTES.md` — but nothing in it corresponds to these three
+thresholds, and no Salkowski assay has ever been run on this instrument under
+Gen5 to copy. So these stay conventions, and the code says so.
 
 ## The workbook
 

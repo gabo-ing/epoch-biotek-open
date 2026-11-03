@@ -209,21 +209,26 @@ there". `tests/test_plate_addressing.py` pins both.
 
 ## What is still worth doing on the trial laptop
 
-The blanking experiment in `docs/BLANK_THRESHOLD.md` has lost most of its
-purpose. What replaces it takes a minute:
+**Nothing, as of the evening of 3 November 2026.** Everything the trial could
+uniquely answer has been answered, and in a single afternoon rather than the
+day of pipetting that was planned:
 
-1. Open the Take3 Preferences dialog and **read the Validation limit (CV%)
-   field**. Screenshot it. That is the number, and no pipetting recovers it.
-2. Note the blanking method the lab actually uses, and the reference
-   wavelength Limit value next to it.
+| | |
+|---|---|
+| the threshold | read off the Preferences dialog: CV% <= 10 |
+| the reference limit | 0.1 OD at 0.5 mm, same dialog |
+| how a failure looks | Status DIVERGING, CV% 29,242, the smudged wells red |
+| can it read a flat 96-well plate | yes, and the numbers match ours to 0.001 AU |
 
-Still worth doing with reagents, for different reasons than before:
+What remains in `docs/BLANK_THRESHOLD.md` is the absolute-accuracy check, and
+that needs a reference material rather than Gen5 -- the question is not
+whether the two programs agree, which they do, but whether both are offset
+from the truth together. So it is off the 25 November clock and should wait
+for a proper standard.
 
-- **The INVALID screenshot.** Knowing the rule is CV%-based does not tell us
-  how Gen5 presents a failure, which wells it reddens, or whether it reddens
-  any. Two reads -- clean water, then one spot smudged -- still answer that.
-- **Part F, absolute accuracy.** Untouched by any of this. The calibration
-  label still says December 2018 and the trial still expires 25 November.
+If the trial is opened again before it lapses, the one thing worth grabbing
+is whatever is cheap and cannot be recovered afterwards: screenshots of
+anything this project has reasoned about without seeing.
 
 ## What was done about it
 

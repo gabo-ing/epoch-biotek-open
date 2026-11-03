@@ -1,192 +1,108 @@
-# Measuring Gen5's blank threshold
+# Gen5's blank threshold
 
-**Status: largely superseded on 3 November 2026. Read `docs/GEN5_NOTES.md`
-first.**
+**Answered on 3 November 2026. It is a setting, not a constant.**
 
-This document was written to measure a Gen5 constant experimentally. Gen5's
-own help files, read on 3 November, say there is no such constant: the
-blanking verdict is a **CV% check against a user-configurable limit**, a field
-called *Validation limit (CV%)* in the Take3 Preferences dialog. Whatever this
-procedure measured would have been that laptop's setting, discovered the
-expensive way.
+    Validation limit (CV%)   10
 
-What replaces most of it: open the dialog and read the number.
+A field in Gen5's Take3 Preferences dialog, carrying 10 on a fresh
+installation, for both Nucleic Acid Quantification and Protein A280. Gen5
+computes a CV% for each wavelength on the **raw** absorbances and refuses to
+read samples while the highest of them exceeds that number -- or cannot be
+calculated at all, which is why a one-well blank fails.
 
-Parts of it still earn their keep, and they are marked below. The procedure is
-kept rather than deleted because the reasoning in it is still how you would
-attack a threshold that really was unknown -- and because being wrong in a
-recoverable way is worth leaving visible.
+The number came from opening the dialog and looking. It took about thirty
+seconds.
 
-> **Deadline: 25 November 2026.** Step 0 was done on 3 November 2026 -- the Gen5
-> trial on the Dell 7290 opens and reads, with 22 days left on it. After that
-> date every Gen5 comparison in this document becomes impossible, permanently.
-> There is no second trial and no other licensed machine.
+## What this document used to be
 
-## Why
+A six-part bench procedure for measuring that threshold experimentally: a
+dilution series of ladder at 1, 2, 3, 5, 10 and 20 ng/uL, nine reads, a
+spiked well moved through a column, two consecutive INVALID runs to bracket
+the boundary. Roughly a day of careful pipetting.
 
-`blank_report()` in `epoch_open/quant.py` decides whether a blanking is usable,
-and it is gated on two numbers:
+**It would not have worked**, and the reason is worth keeping. It assumed the
+threshold was a property of Gen5 waiting to be reverse-engineered. It is a
+per-protocol setting. The experiment would have measured whatever that
+laptop's configuration happened to be and reported it as Gen5's rule -- an
+answer that looks like a measurement, is reproducible, and is wrong in a way
+nothing inside the procedure could have caught.
 
-    BLANK_SPREAD_LIMIT_AU     = 0.004    # how far apart the wells may read
-    BLANK_DIVERGENCE_LIMIT_AU = 0.003    # how far one well may sit from the median
+The whole thing rested on one unexamined assumption, and no amount of care
+within it would have helped. The procedure itself is in the project's history
+rather than here; `git log -p docs/BLANK_THRESHOLD.md` has it if it is ever
+wanted.
 
-**Neither is Gen5's.** Gen5 displays a verdict but never says what it tests, and
-the only blanking exports this lab has are runs Gen5 *passed*. There was nothing
-to reverse-engineer a rejection threshold from, so both limits were set from the
-one run we know Gen5 accepted — the eight wells of `Gen5_LVA_NAQ_0001`, which
-span 0.002 AU with the worst well 0.0015 AU from the median — leaving a blank
-that good about twice the room it needed.
+## What Gen5 does when a blanking fails
 
-That is a defensible guess. It is still a guess, and it is the last number in the
-project set by judgement rather than measurement. This procedure replaces it with
-a measurement, and needs the laptop that still has the Gen5 trial.
+Photographed the same day, with two of four Take3 spots deliberately smudged:
 
-Roughly nine reads. Water and diluted ladder throughout; nothing hazardous.
+| | |
+|---|---|
+| Status | **DIVERGING** |
+| CV% | 29,242 |
+| wells reddened | the two smudged ones; the clean pair stayed green |
+| Read Samples | greyed out |
+| hint beside the grid | "You can discard unnecessary / diverging blank wells" |
 
-## Step 0 -- done
+That hint is the useful part. Red does not mean "this well looks odd", it
+means **"discard this one and the rest agree"** -- it answers the question
+she is about to act on. `wells_to_discard()` in `epoch_open/quant.py` now
+finds exactly that set, and a test asserts that dropping what is red really
+does leave a blanking that passes.
 
-Open Gen5 on the trial laptop and take one read **before preparing anything**. If
-the trial has lapsed, the rest is wasted pipetting.
+It also caught a bug on arrival. The old rule measured each well's distance
+from the median, and with the wells in two groups the median lands in the gap
+between them -- so all four came out red, telling her to wipe two spots that
+were fine.
 
-Checked 3 November 2026: the trial runs, 22 days remaining. The rest of this
-document is now on a clock.
+## What changed in this project as a result
 
-### What to do first, with only water
+| | before | now |
+|---|---|---|
+| blank verdict | spread <= 0.004 AU and divergence <= 0.003 AU | **highest CV% <= 10**, as Gen5 |
+| high reference | 0.010 AU | **0.100 OD**, as Gen5 |
+| a one-well blank | passed | **fails** -- no CV% can be computed |
+| red wells | distance from the median | the set you would discard |
+| status word | NO VALIDO | **DIVERGENTE** when the CV% is what failed |
 
-The full procedure below needs a prepared dilution series. These two reads need
-nothing but ultrapure water and a fingerprint, and they capture the evidence
-this project has never had -- so they are worth doing on the first visit, as
-insurance against the series never getting made:
+The old limits were about four times stricter than Gen5 in practice, and the
+reference margin ten times stricter. Both would have sent the technician back
+to wipe plates her own software accepts. All four numbers are now in the
+Preferences dialog, and in `epoch_open.json` for anyone who prefers a file.
 
-1. **A blank Gen5 accepts.** Water in all eight spots, Read Blanks,
-   **screenshot the panel**. This is the VALID case.
-2. **A blank Gen5 rejects.** Same again, but smudge one spot with a fingerprint
-   or leave it dry. Read Blanks, **screenshot the panel**, and note which wells
-   it painted red.
+`docs/GEN5_NOTES.md` has the full account, including what the same
+documentation says about curve fits, plate geometry, and the capabilities
+this project does not implement.
 
-Two reads, and between them they are the first direct evidence of where Gen5's
-line actually sits. Everything below refines that answer; these two establish
-that there is one.
+## What is still worth doing with the trial
 
-## The spikes
+The trial expires **25 November 2026**. After that there is no licensed Gen5
+in this lab and no second trial.
 
-At Take3's 0.5 mm path, a dsDNA concentration in ng/uL *is* its A260 deviation
-multiplied by 1000 (`ng/uL = A260 x 1000`; see `docs/QUANTIFICATION.md`). So a
-dilution series reads out directly in the units the threshold is written in:
+**Nothing about blanking remains.** The threshold is known, and both the
+accepted and the rejected cases have been captured. What is left is unrelated
+to this document's original subject, and does not need Gen5 at all:
 
-| Tube | Target ng/uL | 260 nm deviation | What epoch-open would say |
-|---|---|---|---|
-| 1 | 1 | 0.001 AU | pass |
-| 2 | 2 | 0.002 AU | pass |
-| 3 | 3 | 0.003 AU | exactly at the limit |
-| 4 | 5 | 0.005 AU | fail |
-| 5 | 10 | 0.010 AU | fail |
-| 6 | 20 | 0.020 AU | fail clearly |
+**Absolute accuracy.** Everything verified so far shows this software reads
+the *instrument* correctly -- it agrees with Gen5 to 0.5% on neat ladder
+(`docs/VALIDATION.md`) and to 0.001 AU across a 96-well plate
+(`docs/GEN5_NOTES.md`). Whether the instrument reads *true* has never been
+checked, and the calibration label says December 2018.
 
-At least 20 uL of each, in the same ultrapure water used for the blanks.
+That needs a reference material of known concentration and the reader. It
+does **not** need Gen5, because the question is not whether the two programs
+agree -- they do -- but whether both are offset from the truth together. So
+it is not on the November clock, and it is better done properly when there is
+a real standard than rushed against a deadline it does not have.
 
-## Part A — measure what was actually made
+## The lesson, since it cost a week
 
-Pipetting 1 ng/uL accurately is not realistic and does not need to be. Read the
-six dilutions as **samples** first (dsDNA). What Gen5 reports is the real
-deviation that tube contributes when it stands in as a blank well, and that
-measured value — not the nominal one — is what every verdict below is mapped
-against.
+Two limits in `quant.py` were set by judgement and documented at length *as*
+judgement -- honestly labelled, with the reasoning written out, with a test
+pinning what tightening them would cost. All of that was good practice and
+none of it helped, because the error was not in the reasoning. It was in the
+question.
 
-One read, six wells.
-
-## Part B — the control
-
-All eight wells of column 2, ultrapure water. Read Blanks. Record Status and CV%.
-
-This must come back VALID. If it does not, the water, the plate or the wiping is
-the problem, and every run below would be measuring that instead.
-
-## Part C — the spike series
-
-Seven water wells plus **one spiked well, always D2**, so position cannot be
-confused with concentration. For each tube in ascending order: wipe, load, Read
-Blanks, record Status, CV%, and which wells Gen5 painted red. Export and
-screenshot each run.
-
-Two consecutive INVALID runs is enough — the boundary is bracketed by then.
-
-The answer is wherever Status flips:
-
-- between tubes 3 and 4 — our 0.003 AU is right
-- at tube 5 or 6 — Gen5 is far more permissive, and our limit sends the
-  technician back to wipe plates Gen5 would have accepted
-- at tube 1 or 2 — we are letting bad blanks through
-
-Note separately **at which run a red well first appears**. It need not be the run
-where Status flips, and if it is not, Gen5 distinguishes "worth flagging" from
-"not usable" — a distinction this program does not currently make.
-
-## Part D — two clusters, nobody to blame
-
-A2–D2 water, E2–H2 all from tube 4. No outlier: two groups of four.
-
-`blank_report()` calls this invalid with `reason="spread"` and paints **nothing**
-red, reasoning that no single well can be blamed and the only honest instruction
-is to blank again. That reasoning is untested. If Gen5 reddens one of the two
-groups, it has a notion of which cluster is "the blank" that this program lacks.
-
-## Part E — the dirty spot
-
-Seven water wells plus one deliberately contaminated spot: a fingerprint on the
-window, or water with a trace of something faintly coloured.
-
-This tests a **different mechanism** from Parts C and D, and it is easy to get
-wrong by assuming otherwise. A smudge raises 260 nm and 320 nm roughly together,
-and the 320 nm subtraction removes most of it — so `divergent_blank_wells()` is
-designed *not* to flag this. The `high_reference` warning watches the reference
-instead.
-
-Record Status, CV%, red wells, and from the export **the 320 nm raw value of the
-dirty well against the clean ones**.
-
-If Gen5 passes this run, a dirty spot is being silently subtracted from every
-sample, which is worth knowing about software this lab has trusted for years.
-
-## Part F — absolute accuracy, while the laptop is there
-
-A separate question that needs the same setup, and the only occasion both
-programs will be in the room together.
-
-Everything verified so far shows epoch-open reads the *instrument* correctly: it
-agrees with Gen5 to 0.5% (`docs/VALIDATION.md`). Whether the instrument reads
-*true* has never been checked, and the calibration label says December 2018.
-
-GeneRuler at known dilutions, read in Gen5, then Gen5 closed (it holds the COM
-port), epoch-open started, and **fresh drops loaded from the same tubes** — 2 uL
-drops do not survive the hand-over, and a half-evaporated drop reads high.
-
-If both programs agree with each other but sit away from the expected value, that
-is the instrument drifting rather than either piece of software, and it is a
-calibration conversation.
-
-## What has to come back
-
-- **A screenshot of the Blanking panel for every run.** The HTML export carries
-  the blank table and the CV% but **not** the Status line — VALID / INVALID
-  exists only on screen. Without the screenshots the session proves nothing.
-- The HTML export of each run, named by run.
-- Which wells Gen5 reddened, per run, noted even when the answer is none. A run
-  Gen5 calls INVALID while reddening nothing is as informative as one where it
-  reddens a well.
-
-## Applying the result
-
-Both limits are in `epoch_open.json` and move without a rebuild:
-
-    "blank_spread_limit_au": 0.004,
-    "blank_divergence_limit_au": 0.003
-
-If Gen5's boundary sits elsewhere, move ours to match and rewrite the comment
-above `BLANK_DIVERGENCE_LIMIT_AU` in `epoch_open/quant.py`, which currently
-explains at length why the number is a judgement call. That comment exists
-because this experiment had not been done.
-
-`tests/test_blanking.py` pins the margins the current defaults leave on the one
-known-good run. If the limits move, that test should move with them and keep
-saying what the new numbers cost.
+Before building an experiment to recover a vendor's behaviour, read the
+vendor's manual. It ships with the software, the lab owns a licence, and the
+answer may simply be written down.
