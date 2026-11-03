@@ -2,6 +2,11 @@
 
 **Status: planned, not yet run.** Everything here is a procedure, not a result.
 
+> **Deadline: 25 November 2026.** Step 0 was done on 3 November 2026 -- the Gen5
+> trial on the Dell 7290 opens and reads, with 22 days left on it. After that
+> date every Gen5 comparison in this document becomes impossible, permanently.
+> There is no second trial and no other licensed machine.
+
 ## Why
 
 `blank_report()` in `epoch_open/quant.py` decides whether a blanking is usable,
@@ -23,10 +28,30 @@ a measurement, and needs the laptop that still has the Gen5 trial.
 
 Roughly nine reads. Water and diluted ladder throughout; nothing hazardous.
 
-## Step 0
+## Step 0 -- done
 
 Open Gen5 on the trial laptop and take one read **before preparing anything**. If
 the trial has lapsed, the rest is wasted pipetting.
+
+Checked 3 November 2026: the trial runs, 22 days remaining. The rest of this
+document is now on a clock.
+
+### What to do first, with only water
+
+The full procedure below needs a prepared dilution series. These two reads need
+nothing but ultrapure water and a fingerprint, and they capture the evidence
+this project has never had -- so they are worth doing on the first visit, as
+insurance against the series never getting made:
+
+1. **A blank Gen5 accepts.** Water in all eight spots, Read Blanks,
+   **screenshot the panel**. This is the VALID case.
+2. **A blank Gen5 rejects.** Same again, but smudge one spot with a fingerprint
+   or leave it dry. Read Blanks, **screenshot the panel**, and note which wells
+   it painted red.
+
+Two reads, and between them they are the first direct evidence of where Gen5's
+line actually sits. Everything below refines that answer; these two establish
+that there is one.
 
 ## The spikes
 
