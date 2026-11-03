@@ -123,9 +123,22 @@ class TestWarnings:
     BLANK = RawWell("blank", {260: 0.045, 280: 0.045, 320: 0.040})
 
     def test_high_reference_is_flagged(self):
-        dirty = RawWell("A2", {260: 0.200, 280: 0.150, 320: 0.090})
+        """The margin is Gen5's: 0,1 OD at 0.5 mm, from its Take3 Preferences.
+
+        It used to be 0,010 here, ten times stricter than the software this
+        lab has used for years, which would have put a yellow warning on wells
+        Gen5 passes without comment. The reference now has to rise by more
+        than 0,1 above the blank's, so this well is dirtier than it was.
+        """
+        dirty = RawWell("A2", {260: 0.400, 280: 0.300, 320: 0.200})
         result = quantify(dirty, self.BLANK)
         assert any(w.code == "high_reference" for w in result.warnings)
+
+    def test_a_reference_gen5_would_pass_is_not_flagged(self):
+        """0,05 above the blank is within Gen5's limit, so we stay quiet too."""
+        slightly = RawWell("A2", {260: 0.200, 280: 0.150, 320: 0.090})
+        result = quantify(slightly, self.BLANK)
+        assert not any(w.code == "high_reference" for w in result.warnings)
 
     def test_noise_floor_is_flagged(self):
         faint = RawWell("A2", {260: 0.046, 280: 0.0455, 320: 0.0405})

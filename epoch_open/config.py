@@ -66,6 +66,7 @@ class Config:
     reader_serial: str | None = None
     plate_serial: str = "243819"
     plates: dict[str, dict[str, float]] = field(default_factory=dict)
+    blank_cv_limit_percent: float = quant.BLANK_CV_LIMIT_PERCENT
     blank_spread_limit_au: float = quant.BLANK_SPREAD_LIMIT_AU
     blank_divergence_limit_au: float = quant.BLANK_DIVERGENCE_LIMIT_AU
     source: str = "defaults"
@@ -114,6 +115,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
             serial: {k: round(float(v), 4) for k, v in sorted(table.items())}
             for serial, table in sorted(cfg.plates.items())
         },
+        "blank_cv_limit_percent": cfg.blank_cv_limit_percent,
         "blank_spread_limit_au": cfg.blank_spread_limit_au,
         "blank_divergence_limit_au": cfg.blank_divergence_limit_au,
     }
@@ -177,6 +179,8 @@ def load(path: Path | None = None) -> Config:
         reader_serial=str(serial) if serial else None,
         plate_serial=plate,
         plates=plates,
+        blank_cv_limit_percent=positive(
+            "blank_cv_limit_percent", quant.BLANK_CV_LIMIT_PERCENT),
         blank_spread_limit_au=positive("blank_spread_limit_au",
                                        quant.BLANK_SPREAD_LIMIT_AU),
         blank_divergence_limit_au=positive("blank_divergence_limit_au",

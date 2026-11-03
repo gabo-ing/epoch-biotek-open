@@ -220,34 +220,40 @@ class TestTheStatusBlock:
         finally:
             app.destroy()
 
-    def test_a_single_well_blank_reports_no_cv_rather_than_zero(self):
-        """0,00 would read as perfect agreement instead of nothing to compare."""
+    def test_a_single_well_blank_reports_no_cv_and_is_refused(self):
+        """0,00 would read as perfect agreement instead of nothing to compare.
+
+        And a blank that cannot be judged is not a blank that passed: Gen5
+        refuses to read samples when the CV% cannot be calculated, so the
+        state says NO VALIDO and the screen says to mark a second well.
+        """
         app = _app()
         if app is None:
             return
         try:
             _blanking(app, {"A2": 0.0})
             assert _field(app, "cv") == "-"
-            assert _field(app, "state") == gui.TEXT["blank_state_valid"]
+            assert _field(app, "state") == gui.TEXT["blank_state_invalid"]
+            assert app.blank_label.cget("text") == gui.TEXT["blank_why_single"]
         finally:
             app.destroy()
 
     def test_a_bad_blank_says_what_to_do_about_it(self):
-        """Not just that it failed: which of the two fixes applies.
+        """Not just that it failed, but which fix applies.
 
-        A single red well can be discarded. A set that merely disagrees has
-        nothing to discard and has to be blanked again. The line under the
-        grids has to say whichever one is true.
+        The wells disagreeing too much for the CV% limit is one message; a
+        lone well that cannot be judged at all is another, and the fix is
+        different -- wipe and repeat, versus mark a second well.
         """
         app = _app()
         if app is None:
             return
         try:
             _blanking(app, {"A2": 0.010, "B2": 0.0, "C2": 0.0})
-            assert app.blank_label.cget("text") == gui.TEXT["blank_why_divergent"]
+            assert app.blank_label.cget("text") == gui.TEXT["blank_why_cv"]
 
-            _blanking(app, {"A2": 0.005, "B2": 0.0})
-            assert app.blank_label.cget("text") == gui.TEXT["blank_why_spread"]
+            _blanking(app, {"A2": 0.0})
+            assert app.blank_label.cget("text") == gui.TEXT["blank_why_single"]
         finally:
             app.destroy()
 

@@ -83,6 +83,12 @@ TEXT = {
     "blank_why_divergent": ("Hay pozos de blanco que no concuerdan con el resto "
                             "(en rojo). Descartalos, o limpia todo y vuelve a "
                             "blanquear."),
+    "blank_why_cv": ("Los pozos del blanco varian demasiado entre si "
+                     "(CV% por encima del limite). Limpia la placa, vuelve a "
+                     "cargar el agua y repite el blanco."),
+    "blank_why_single": ("Con un solo pozo no se puede calcular el CV%, asi que "
+                         "no hay forma de saber si el blanco es bueno. Marca al "
+                         "menos dos pozos y repite el blanco."),
     "blank_why_spread": ("Los pozos del blanco no concuerdan entre si. Limpia la "
                          "placa y vuelve a blanquear."),
     "blank_why_pending": "Faltan pozos por leer (en azul).",
@@ -554,6 +560,7 @@ class App(ScreenFit, tk.Tk):
         self.blank = kept or None
         self.blank_report = blank_report(
             kept,
+            CONFIG.blank_cv_limit_percent,
             CONFIG.blank_spread_limit_au,
             CONFIG.blank_divergence_limit_au,
         ) if kept else None
@@ -572,6 +579,8 @@ class App(ScreenFit, tk.Tk):
         if self.blank_report is None:
             return TEXT["blank_why_empty"]
         return {
+            "cv": TEXT["blank_why_cv"],
+            "single": TEXT["blank_why_single"],
             "divergent": TEXT["blank_why_divergent"],
             "spread": TEXT["blank_why_spread"],
             "empty": TEXT["blank_why_empty"],

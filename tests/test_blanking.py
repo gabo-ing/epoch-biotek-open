@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from epoch_open import quant
 from epoch_open.quant import (                          # noqa: E402
     BLANK_DIVERGENCE_LIMIT_AU,
     BLANK_SPREAD_LIMIT_AU,
@@ -95,10 +96,19 @@ class TestAgainstTheOneRealRun:
         for wavelength, reported in GEN5_REPORTED_CV.items():
             assert abs(report.cv_percent[wavelength] - reported) < 0.4
 
-    def test_a_single_well_blank_has_no_cv_to_report(self):
-        """Gen5 prints no CV for its one-well blanks, and neither can we."""
+    def test_a_single_well_blank_is_refused_because_it_cannot_be_judged(self):
+        """One well has no CV%, and Gen5 treats that as a failed blank.
+
+        Its help is explicit: if the highest CV% exceeds the limit *or the CV%
+        cannot be calculated*, it warns and will not read samples. One well
+        cannot be checked against anything, so accepting it would mean
+        quantifying against a blank nobody has any evidence about.
+
+        This changed when that rule was read. A one-well blank used to pass.
+        """
         report = blank_report(wells({"A3": (0.053, 0.049, 0.045)}))
-        assert report.valid
+        assert not report.valid
+        assert report.reason == "single"
         assert report.cv_percent[260] == 0.0
 
 
@@ -117,8 +127,9 @@ class TestFindingTheBadSpot:
         blanks = flat(["A2", "B2", "C2", "D2"], delta_260=0.010)
         report = blank_report(blanks)
         assert report.divergent == ("A2",)
-        assert not report.valid
-        assert report.reason == "divergent"
+        # The well is named so it can be wiped or discarded. Whether the
+        # blanking as a whole passes is a separate question, decided by CV%.
+        assert "B2" not in report.divergent
 
     def test_two_wells_that_disagree_are_both_flagged(self):
         """Neither can be called the wrong one, so neither is trusted."""
@@ -169,11 +180,17 @@ class TestDiscardingAndRecovering:
 
 
 class TestTheTwoLimitsTogether:
-    def test_an_outlier_is_named_rather_than_the_whole_set_condemned(self):
+    def test_an_outlier_is_named_without_the_naming_being_the_verdict(self):
+        """Gen5 lets a bad well be clicked out of the average, not blocked on.
+
+        So a divergent well is advice -- paint it red, say which spot to wipe --
+        and the verdict itself comes from the CV% check. This is the behaviour
+        that changed when Gen5's rule was read on 3 November 2026.
+        """
         blanks = flat(["A2", "B2", "C2"], delta_260=0.010)
         report = blank_report(blanks)
-        assert report.reason == "divergent"
         assert report.divergent == ("A2",)
+        assert report.reason != "divergent"
 
     def test_two_wells_that_merely_disagree_fail_on_spread_with_nothing_red(self):
         """Neither well is far enough from the median to be blamed.
@@ -189,8 +206,34 @@ class TestTheTwoLimitsTogether:
         assert report.reason == "spread"
         assert report.divergent == ()
 
-    def test_both_limits_can_be_loosened_until_the_blank_passes(self):
+    def test_the_limits_can_be_loosened_until_the_blank_passes(self):
+        """All three are arguments, so a lab can move them without a rebuild."""
         blanks = flat(["A2", "B2", "C2"], delta_260=0.010)
-        report = blank_report(blanks, spread_limit_au=0.050,
+        report = blank_report(blanks, cv_limit_percent=99.0,
+                              spread_limit_au=0.050,
                               divergence_limit_au=0.050)
         assert report.valid
+
+    def test_the_cv_limit_is_what_decides(self):
+        """Tightening only the CV% limit must be enough to fail a blanking."""
+        blanks = flat(["A2", "B2", "C2"], delta_260=0.010)
+        loose = blank_report(blanks, cv_limit_percent=99.0,
+                             spread_limit_au=0.050,
+                             divergence_limit_au=0.050)
+        tight = blank_report(blanks, cv_limit_percent=0.5,
+                             spread_limit_au=0.050,
+                             divergence_limit_au=0.050)
+        assert loose.valid
+        assert not tight.valid
+        assert tight.reason == "cv"
+
+    def test_the_run_gen5_accepted_passes_gen5_s_own_limit(self):
+        """The whole point of matching: agreeing with it on real data.
+
+        Gen5_LVA_NAQ_0001 was printed VALID by Gen5 with a CV% of 4,32 at
+        260 nm, against the limit of 10 its preferences dialog ships with.
+        """
+        report = blank_report(wells(GEN5_VALID_RUN))
+        assert report.valid
+        assert max(report.cv_percent.values()) < quant.BLANK_CV_LIMIT_PERCENT
+        assert quant.BLANK_CV_LIMIT_PERCENT == 10.0

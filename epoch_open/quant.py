@@ -70,7 +70,7 @@ PURITY_260_230 = (2.0, 2.2)
 
 # A reference reading far above the blank's means something is on the window or in
 # the drop that is not sample. Gen5 shades these yellow and says so in the export.
-HIGH_REFERENCE_MARGIN = 0.010
+HIGH_REFERENCE_MARGIN = 0.100
 
 
 @dataclass(frozen=True)
@@ -402,29 +402,47 @@ def blank_spread(blanks: dict[str, RawWell]) -> float:
     return max(deltas) - min(deltas)
 
 
+# The blanking verdict, as Gen5 makes it.
+#
+# Gen5 computes a CV% for each wavelength on the RAW absorbances and refuses to
+# read samples while the highest of them exceeds a limit the user sets. The
+# limit is a field called "Validation limit (CV%)" in the Take3 Preferences
+# dialog, and 10 is what a fresh installation ships with -- read off this lab's
+# licensed copy on 3 November 2026, for both Nucleic Acid Quantification and
+# Protein A280. See docs/GEN5_NOTES.md.
+#
+# This replaced two absolute limits of our own. They were not wrong so much as
+# the wrong kind of thing: absorbance units where Gen5 uses a ratio, and about
+# four times tighter in practice, which would have sent the technician back to
+# wipe plates her old software would have accepted. Matching the instrument's
+# own software is worth more here than being carefully stricter than it.
+BLANK_CV_LIMIT_PERCENT = 10.0
+
 # Above this spread the blank is not trustworthy. A blank is ~0.006 AU, and at
 # 0.5 mm an error of 0.004 AU is 4 ng/uL of dsDNA: nothing on a 400 ng/uL sample,
 # ruinous on a 10 ng/uL one.
+#
+# No longer the gate -- see BLANK_CV_LIMIT_PERCENT. It is kept because CV% is a
+# ratio and so says nothing about absolute size: a blank sitting on a high
+# background can hold its CV% under 10 while its wells disagree by more ng/uL
+# than anyone would report. This is the floor under that case, and it is
+# deliberately loose enough that in ordinary use the CV% limit is what decides.
 BLANK_SPREAD_LIMIT_AU = 0.004
 
 # How far one blank well may sit from the middle of the others before it is named
 # on screen as the spot to wipe.
 #
-# This threshold is OURS, not a recovered Gen5 constant: there is no export of a
-# blanking run Gen5 rejected, so there is nothing to reverse-engineer it from. It
-# is set from the one run we know Gen5 passed -- the eight wells of
-# Gen5_LVA_NAQ_0001, whose worst well sits 0.0015 AU from the median -- so a blank
-# as good as that one keeps about twice the room it actually needed. Being tighter
-# than that would mean reddening wells on blanks the instrument's own software was
-# happy with, and sending the technician back to wipe a plate that was fine.
+# This is advice, not a verdict. It paints the well red so the technician knows
+# which spot to wipe or discard; it does not by itself stop her reading samples.
+# That is Gen5's arrangement too -- Gen5 lets a well be clicked out of the
+# average and recomputes, rather than refusing until she does -- and the
+# distinction matters, because a well that is visibly off on a blanking whose
+# CV% is still fine is information, not an obstacle.
 #
-# It sits below BLANK_SPREAD_LIMIT_AU so that a single bad spot gets named before
-# the set as a whole is condemned. The two limits are independent, and each catches
-# something the other does not: this one finds the outlier among wells that
-# otherwise agree, while the spread finds a set that disagrees without any one well
-# standing out -- two wells 0.005 AU apart, say, where neither can be called the
-# wrong one. Both are in the config file, for a lab that finds them too strict or
-# too slack to move without touching the program.
+# The number is ours. It is set from the one blanking we know Gen5 accepted,
+# whose worst well sits 0.0015 AU from the median, leaving a blank that good
+# about twice the room it needed. Being tighter would redden wells on blanks
+# the instrument's own software was happy with.
 BLANK_DIVERGENCE_LIMIT_AU = 0.003
 
 
@@ -488,21 +506,28 @@ class BlankReport:
 
 def blank_report(
     blanks: dict[str, RawWell],
+    cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
     spread_limit_au: float = BLANK_SPREAD_LIMIT_AU,
     divergence_limit_au: float = BLANK_DIVERGENCE_LIMIT_AU,
 ) -> BlankReport:
-    """Judge a set of blank wells: per-well divergence, overall spread, CV.
+    """Judge a set of blank wells the way Gen5 does.
 
-    A blank passes when no single well is off on its own *and* the wells together
-    span less than `spread_limit_au`. Both have to hold, because each catches a
-    failure the other misses: a tight cluster plus one outlier can still span
-    less than the spread limit, and two wells that simply disagree can span more
-    than it while neither is far enough from the median to be the one at fault.
+    The verdict is the **highest CV% across the wavelengths read**, measured on
+    raw absorbances, against `cv_limit_percent`. That is Gen5's rule and Gen5's
+    default of 10; see docs/GEN5_NOTES.md for where the number comes from.
 
-    When a well is singled out, `divergent` names it and the screen paints it
-    red, because there is something to do about it: discard that well, or wipe
-    that spot. When the set merely disagrees, nothing is painted red and the only
-    honest instruction is to blank the plate again.
+    `spread_limit_au` is a floor underneath it, for the case a ratio cannot
+    see: a blank on a high background can keep its CV% respectable while its
+    wells disagree by an absolute amount that matters at 0.5 mm.
+
+    A well that sits well away from the others is still named in `divergent`
+    and painted red, but that alone no longer blocks the run. It tells her
+    which spot to wipe or discard; Gen5 likewise lets a well be clicked out of
+    the average rather than refusing until it is. A single well off a blanking
+    whose CV% is fine is information, not an obstacle.
+
+    With fewer than two wells a CV% cannot be computed at all, which Gen5 also
+    treats as a failed blank.
     """
     if not blanks:
         return BlankReport(wells=(), divergent=(), spread_au=0.0,
@@ -513,8 +538,12 @@ def blank_report(
     divergent = divergent_blank_wells(blanks, divergence_limit_au)
     spread = blank_spread(blanks)
 
-    if divergent:
-        reason = "divergent"
+    if len(blanks) < 2:
+        # Gen5 requires two or more wells for "use blank average", and treats a
+        # CV% that cannot be calculated as a failure rather than a pass.
+        reason = "single"
+    elif cv and max(cv.values()) > cv_limit_percent:
+        reason = "cv"
     elif spread > spread_limit_au:
         reason = "spread"
     else:
