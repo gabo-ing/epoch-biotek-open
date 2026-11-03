@@ -246,6 +246,7 @@ def quantify(
     blank: RawWell | None = None,
     sample_type: str = "dsDNA",
     pathlengths: dict[str, float] | float | None = None,
+    reference_limit_od: float = HIGH_REFERENCE_MARGIN,
 ) -> QuantResult:
     """Turn one well into a concentration, the way Gen5 does it.
 
@@ -283,7 +284,7 @@ def quantify(
     ratio_230 = _ratio(a260, a230) if a230 is not None else None
 
     # A high reference reading means background, not sample. Gen5 flags these.
-    if blank is not None and sample.reference > blank.reference + HIGH_REFERENCE_MARGIN:
+    if blank is not None and sample.reference > blank.reference + reference_limit_od:
         warnings.append(
             warn("high_reference", reference=sample.reference, blank=blank.reference)
         )

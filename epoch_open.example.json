@@ -21,6 +21,7 @@
     "_blank_comment": "How the blanking verdict is judged. blank_cv_limit_percent is Gen5's own rule and its default: the highest CV% across the wavelengths read, on raw absorbances. The two _au limits are ours -- spread is an absolute floor under the CV% check, and divergence only decides which well is painted red, not whether the blank passes. See docs/GEN5_NOTES.md.",
 
   "blank_cv_limit_percent": 10.0,
+  "reference_limit_od": 0.1,
   "blank_spread_limit_au": 0.004,
 
   "blank_divergence_limit_au": 0.003

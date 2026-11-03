@@ -141,7 +141,33 @@ Still worth doing with reagents, for different reasons than before:
 - **Part F, absolute accuracy.** Untouched by any of this. The calibration
   label still says December 2018 and the trial still expires 25 November.
 
-## The decision this leaves open
+## What was done about it
+
+Settled on 3 November 2026: **behave like Gen5**, on the reasoning that
+nobody changes these settings and the verdict agreeing with the software the
+lab has used for years is worth more than being carefully stricter than it.
+
+- The blank verdict is now the highest CV% against a limit defaulting to
+  **10**, Gen5's number.
+- The high-reference margin is **0.1 OD at 0.5 mm**, Gen5's number, up from
+  0.010.
+- The spread limit stays as an absolute floor under the CV% check, because a
+  ratio says nothing about absolute size.
+- The divergence limit now only decides which well is painted red. It names
+  the spot to wipe and no longer blocks the run, which is Gen5's arrangement
+  too -- it lets a well be clicked out of the average rather than refusing
+  until it is.
+- A one-well blank now **fails** where it used to pass. Gen5's help is
+  explicit that a CV% which cannot be calculated is a failed blank, and it is
+  right: a lone blank well has no evidence behind it and every sample in the
+  run is divided by it.
+
+All four numbers are in a **Preferences dialog**, laid out like Gen5's Take3
+Preferences -- same grouping, same field names, same units -- because that is
+where someone would go looking. `docs/img/preferences.png` shows it. They
+also remain in `epoch_open.json` for anyone who prefers a file.
+
+## The reasoning behind that decision, kept
 
 Whether to change the blank gate from absorbance units to CV%, matching
 Gen5's criterion and making the limit configurable as Gen5 does.

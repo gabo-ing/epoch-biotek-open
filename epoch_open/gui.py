@@ -18,7 +18,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__, config, take3
-from .quant import (QuantError, blank_for, blank_report, quantify, unit_for,
+from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
+                    BLANK_SPREAD_LIMIT_AU, HIGH_REFERENCE_MARGIN, QuantError,
+                    REFERENCE_NM, blank_for, blank_report, quantify, unit_for,
                     wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import export_results
@@ -55,6 +57,38 @@ TEXT = {
     "plate_calibrated": "calibrada",
     "plate_uncalibrated": "SIN CALIBRAR",
     "plate_change": "Cambiar placa...",
+    "prefs_open": "Preferencias...",
+    "prefs_title": "Preferencias",
+    "prefs_help": ("Estos son los mismos ajustes que Gen5 tiene en Take3 "
+                   "Preferences, con sus valores de fabrica. Cambialos solo si "
+                   "sabes por que."),
+    "prefs_blank_group": "Validacion del blanco",
+    "prefs_cv": "Limite de validacion (CV%):",
+    "prefs_cv_help": ("Gen5 no deja leer muestras si el CV% mas alto de las "
+                      "longitudes de onda supera este valor. Su valor de "
+                      "fabrica es 10."),
+    "prefs_ref_group": "Longitud de onda de referencia",
+    "prefs_ref_nm": "Longitud de onda:",
+    "prefs_ref_limit": "Limite:",
+    "prefs_ref_unit": "DO a 0,5 mm",
+    "prefs_ref_help": ("Si la referencia de una muestra supera la del blanco en "
+                       "mas que este limite, la fila se marca en ambar. Gen5 "
+                       "usa 0,1."),
+    "prefs_extra_group": "Ajustes propios de este programa",
+    "prefs_spread": "Dispersion maxima (DO):",
+    "prefs_divergence": "Pozo divergente (DO):",
+    "prefs_extra_help": ("Gen5 no tiene estos dos. La dispersion es un suelo "
+                         "por debajo del CV%, que es una razon y no mide "
+                         "tamanos absolutos. El de divergencia solo decide que "
+                         "pozo se pinta en rojo; no bloquea la lectura."),
+    "prefs_save": "Aceptar",
+    "prefs_cancel": "Cancelar",
+    "prefs_defaults": "Valores de fabrica",
+    "prefs_bad_value": ("{field}: '{value}' no es un numero valido. Tiene que "
+                        "ser mayor que cero."),
+    "prefs_bad_nm": ("Longitud de onda de referencia: '{value}' no vale. El "
+                     "Epoch lee entre 200 y 999 nm."),
+    "prefs_saved": "Preferencias guardadas.",
     "path_nominal": ("Sin hoja de calibracion de esta placa: se usa 0,5 mm "
                      "nominal, las concentraciones pueden desviarse ~2%."),
     "plate_dialog_title": "Placa Take3",
@@ -336,6 +370,8 @@ class App(ScreenFit, tk.Tk):
         self.plate_state.pack(side="left", padx=(8, 0))
         ttk.Button(plate_row, text=TEXT["plate_change"],
                    command=self._change_plate).pack(side="right")
+        ttk.Button(plate_row, text=TEXT["prefs_open"],
+                   command=self._preferences).pack(side="right", padx=(0, 6))
 
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=3)
@@ -673,6 +709,33 @@ class App(ScreenFit, tk.Tk):
         else:
             self.path_warning.pack(anchor="w", pady=(2, 0))
 
+    def _preferences(self) -> None:
+        """Open the thresholds, and apply them without a restart.
+
+        The limits are read from CONFIG every time a blank is judged, so
+        writing them back into CONFIG and re-running the verdict is all that
+        is needed: a blanking already on screen is re-judged under the new
+        numbers the moment the dialog closes.
+        """
+        dialog = PreferencesDialog(self, CONFIG)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+
+        CONFIG.blank_cv_limit_percent = dialog.result["cv"]
+        CONFIG.reference_limit_od = dialog.result["ref_limit"]
+        CONFIG.blank_spread_limit_au = dialog.result["spread"]
+        CONFIG.blank_divergence_limit_au = dialog.result["divergence"]
+        try:
+            config.save(CONFIG)
+        except OSError as exc:
+            messagebox.showerror(TEXT["title"],
+                                 TEXT["save_error"].format(error=exc))
+            return
+
+        self._refresh_state()
+        self._say(TEXT["prefs_saved"])
+
     def _change_plate(self) -> None:
         dialog = PlateDialog(self, self.plate_serial, self.pathlengths)
         self.wait_window(dialog)
@@ -946,7 +1009,8 @@ class App(ScreenFit, tk.Tk):
                 self.results.append((
                     self.read_number,
                     quantify(raw[well], blank_for(self.blank, well),
-                             sample_type, self.pathlengths),
+                             sample_type, self.pathlengths,
+                             CONFIG.reference_limit_od),
                 ))
             except QuantError as exc:
                 self.table.insert("", "end",
@@ -1035,6 +1099,144 @@ class App(ScreenFit, tk.Tk):
         self._read_blank()
         self._read_samples()
         self._read_samples()
+
+
+class PreferencesDialog(tk.Toplevel):
+    """The handful of numbers that decide a verdict, in one place.
+
+    Deliberately shaped like Gen5's Take3 Preferences dialog -- same grouping,
+    same field names, same units -- because the technician has used that
+    screen for years and this is where she would go looking. The defaults are
+    Gen5's factory values, read off this lab's licensed copy; see
+    docs/GEN5_NOTES.md.
+
+    Nothing here is needed in ordinary use. It exists because the one thing
+    worse than a wrong threshold is a wrong threshold nobody can reach: this
+    ships as a single .exe, so without this dialog changing a limit means
+    editing JSON next to the executable, or a rebuild.
+    """
+
+    def __init__(self, parent, config):
+        super().__init__(parent)
+        self.title(TEXT["prefs_title"])
+        self.transient(parent)
+        self.resizable(False, False)
+        self.configure(bg=CANVAS)
+        self.result = None
+        self.px = parent.px
+        self.ui_font = parent.ui_font
+        self.base_pt = parent.base_pt
+
+        body = ttk.Frame(self, padding=16)
+        body.pack(fill="both", expand=True)
+
+        ttk.Label(body, text=TEXT["prefs_help"], wraplength=self.px(420),
+                  style="Muted.TLabel").pack(anchor="w", pady=(0, 12))
+
+        self.fields = {}
+
+        blank = ttk.LabelFrame(body, text=TEXT["prefs_blank_group"], padding=10,
+                               style="Card.TLabelframe")
+        blank.pack(fill="x", pady=(0, 10))
+        self._row(blank, "cv", TEXT["prefs_cv"], config.blank_cv_limit_percent)
+        ttk.Label(blank, text=TEXT["prefs_cv_help"], wraplength=self.px(390),
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
+
+        reference = ttk.LabelFrame(body, text=TEXT["prefs_ref_group"],
+                                   padding=10, style="Card.TLabelframe")
+        reference.pack(fill="x", pady=(0, 10))
+        self._row(reference, "ref_nm", TEXT["prefs_ref_nm"], REFERENCE_NM)
+        self._row(reference, "ref_limit", TEXT["prefs_ref_limit"],
+                  config.reference_limit_od, suffix=TEXT["prefs_ref_unit"])
+        ttk.Label(reference, text=TEXT["prefs_ref_help"],
+                  wraplength=self.px(390),
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
+
+        extra = ttk.LabelFrame(body, text=TEXT["prefs_extra_group"], padding=10,
+                               style="Card.TLabelframe")
+        extra.pack(fill="x", pady=(0, 12))
+        self._row(extra, "spread", TEXT["prefs_spread"],
+                  config.blank_spread_limit_au)
+        self._row(extra, "divergence", TEXT["prefs_divergence"],
+                  config.blank_divergence_limit_au)
+        ttk.Label(extra, text=TEXT["prefs_extra_help"],
+                  wraplength=self.px(390),
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
+
+        buttons = ttk.Frame(body)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text=TEXT["prefs_defaults"],
+                   command=self._defaults).pack(side="left")
+        ttk.Button(buttons, text=TEXT["prefs_cancel"],
+                   command=self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(buttons, text=TEXT["prefs_save"],
+                   command=self._save).pack(side="right")
+
+        self.bind("<Return>", lambda _e: self._save())
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.grab_set()
+
+    def _row(self, parent, key, label, value, suffix=""):
+        row = ttk.Frame(parent, style="Card.TFrame")
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text=label, width=26, style="Card.TLabel").pack(side="left")
+        variable = tk.StringVar(value=str(value).replace(".", ","))
+        entry = ttk.Entry(row, textvariable=variable, width=10)
+        entry.pack(side="left")
+        if suffix:
+            ttk.Label(row, text=suffix, style="CardMuted.TLabel").pack(
+                side="left", padx=(6, 0))
+        self.fields[key] = variable
+
+    def _defaults(self) -> None:
+        """Gen5's factory values, and this program's own starting points."""
+        for key, value in (("cv", BLANK_CV_LIMIT_PERCENT),
+                           ("ref_nm", REFERENCE_NM),
+                           ("ref_limit", HIGH_REFERENCE_MARGIN),
+                           ("spread", BLANK_SPREAD_LIMIT_AU),
+                           ("divergence", BLANK_DIVERGENCE_LIMIT_AU)):
+            self.fields[key].set(str(value).replace(".", ","))
+
+    def _number(self, key, label):
+        """A positive number, with a comma accepted as the decimal mark."""
+        raw = self.fields[key].get().strip().replace(",", ".")
+        try:
+            value = float(raw)
+        except ValueError:
+            value = -1.0
+        if value <= 0:
+            messagebox.showerror(
+                TEXT["prefs_title"],
+                TEXT["prefs_bad_value"].format(field=label, value=
+                                               self.fields[key].get()),
+                parent=self)
+            return None
+        return value
+
+    def _save(self) -> None:
+        values = {}
+        for key, label in (("cv", TEXT["prefs_cv"]),
+                           ("ref_limit", TEXT["prefs_ref_limit"]),
+                           ("spread", TEXT["prefs_spread"]),
+                           ("divergence", TEXT["prefs_divergence"])):
+            value = self._number(key, label)
+            if value is None:
+                return
+            values[key] = value
+
+        # The reference wavelength is shown because Gen5 shows it, but it is
+        # not editable in effect: every reading this program takes includes
+        # 320 nm and the whole correction is built on it. Changing it here
+        # would be a lie, so it is checked and refused rather than ignored.
+        shown = self.fields["ref_nm"].get().strip()
+        if shown not in (str(REFERENCE_NM), f"{REFERENCE_NM},0"):
+            messagebox.showerror(
+                TEXT["prefs_title"],
+                TEXT["prefs_bad_nm"].format(value=shown), parent=self)
+            return
+
+        self.result = values
+        self.destroy()
 
 
 class PlateDialog(tk.Toplevel):
