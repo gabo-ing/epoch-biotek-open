@@ -451,3 +451,152 @@ class TestWhatTheScreenSays:
             assert app.fit.notes == ()
         finally:
             app.destroy()
+
+
+class TestTheStepsCanBeWalkedInOrder:
+    """The order the screen tells you to work in has to actually work.
+
+    Both bugs here were found by Gabo using the program on real hardware on
+    3 November 2026, and neither was visible to any automated test.
+
+    The first: marking a sample well threw away the curve. `_click_well`
+    invalidated the fit on any change at all, so fitting a curve and then
+    marking the samples it was fitted for left no curve, and step 3 could
+    never be reached. Every test in this suite marked its samples *before*
+    reading anything -- the one order in which the bug cannot appear.
+
+    The second: after reading a blank, every other button stayed grey and
+    nothing said why. The gating was right and the silence was not.
+    """
+
+    def _ready(self, app):
+        """Blank read and curve fitted, nothing marked as a sample yet."""
+        app.role.set(gui_curve.BLANK)
+        for well in ("A1", "B1", "C1"):
+            app._click_well(well)
+        app._read_blank()
+
+        app.role.set(gui_curve.STANDARD)
+        series = {"A2": 0, "B2": 5, "C2": 10, "D2": 20}
+        for well in series:
+            app._click_well(well)
+        app.concentrations.update(series)
+        app._refresh_state()
+        app._read_standards()
+        assert app.fit is not None and app.fit.usable
+        return app
+
+    def test_marking_a_sample_keeps_the_curve(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._ready(app)
+            app.role.set(gui_curve.SAMPLE)
+            app._click_well("A3")
+            assert app.fit is not None, (
+                "marking a sample threw away the curve, so step 3 was "
+                "unreachable")
+            assert _state(app, "read_samples") == "normal"
+        finally:
+            app.destroy()
+
+    def test_the_three_reads_happen_in_the_order_the_screen_gives(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._ready(app)
+            app.role.set(gui_curve.SAMPLE)
+            app._click_well("A3")
+            app._read_samples()
+            assert app.results, "no sample was quantified"
+            assert _state(app, "end_batch") == "normal"
+        finally:
+            app.destroy()
+
+    def test_unmarking_a_standard_still_discards_the_curve(self):
+        """The narrowed rule must not have narrowed too far."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._ready(app)
+            app.role.set(gui_curve.STANDARD)
+            app._click_well("A2")
+            assert app.fit is None
+        finally:
+            app.destroy()
+
+    def test_changing_the_blank_wells_still_discards_the_curve(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._ready(app)
+            app.role.set(gui_curve.BLANK)
+            app._click_well("D1")
+            assert app.fit is None
+        finally:
+            app.destroy()
+
+
+class TestItSaysWhatIsMissing:
+    """A greyed-out button with no reason is worse than an error message."""
+
+    def test_it_names_the_next_action_at_every_stage(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            assert app.next_label.cget("text"), "silent with an empty plate"
+
+            app.role.set(gui_curve.BLANK)
+            for well in ("A1", "B1", "C1"):
+                app._click_well(well)
+            assert "Leer blanco" in app.next_label.cget("text")
+
+            app._read_blank()
+            # The moment Gabo got stuck: blank read, everything else grey.
+            said = app.next_label.cget("text")
+            assert "patron" in said.lower(), (
+                f"after the blank it said {said!r}, which does not mention "
+                "the standards that are actually missing")
+            assert str(curve.MIN_STANDARDS) in said
+        finally:
+            app.destroy()
+
+    def test_it_names_the_wells_whose_concentration_is_missing(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            app.role.set(gui_curve.BLANK)
+            for well in ("A1", "B1", "C1"):
+                app._click_well(well)
+            app._read_blank()
+
+            app.role.set(gui_curve.STANDARD)
+            for well in ("A2", "B2", "C2"):
+                app._click_well(well)
+            app.concentrations["A2"] = 0
+            app._refresh_state()
+
+            said = app.next_label.cget("text")
+            assert "B2" in said and "C2" in said, (
+                "it should name the standards still missing a concentration")
+            assert "A2" not in said, "A2 already has one"
+        finally:
+            app.destroy()
+
+    def test_it_asks_for_the_reader_when_there_is_none(self):
+        if not IMPORTED:
+            return
+        try:
+            app = gui_curve.App(None)
+        except Exception:
+            return
+        try:
+            assert "lector" in app.next_label.cget("text").lower()
+        finally:
+            app.destroy()

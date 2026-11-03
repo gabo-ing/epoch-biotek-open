@@ -138,6 +138,24 @@ TEXT = {
     "name_prompt": "Nombre de la muestra en {well}:",
     "name_title": "Nombre de muestra",
 
+    # What is standing between her and the next read. The buttons grey
+    # themselves out correctly and say nothing about why, which is the worst
+    # of both: a refusal with no reason. Gabo read a blank, found every other
+    # button still dead, and asked what was wrong -- nothing was.
+    "next_mark_blank": "Marca los pozos del blanco de reactivo.",
+    "next_read_blank": "Ahora pulsa '1. Leer blanco'.",
+    "next_mark_standards": ("Marca al menos {need} pozos como patron "
+                            "(llevas {have})."),
+    "next_concentrations": ("Doble clic en cada patron para escribir su "
+                            "concentracion. Faltan: {wells}."),
+    "next_read_standards": "Ahora pulsa '2. Leer patrones'.",
+    "next_curve_bad": "La curva no sirve todavia. Mira el aviso de la derecha.",
+    "next_mark_samples": "Marca los pozos de muestra.",
+    "next_read_samples": "Ahora pulsa '3. Leer muestras'.",
+    "next_save": "Cuando termines, pulsa '4. Fin del lote' para guardar.",
+    "next_no_reader": "Enciende el lector para poder medir.",
+    "next_bad_wavelength": "Revisa la longitud de onda: tiene que estar entre 200 y 999.",
+
     "instructions": ("Blanco de reactivo -> patrones con su concentracion -> "
                      "muestras -> fin del lote."),
 }
@@ -379,6 +397,14 @@ class App(ScreenFit, tk.Tk):
             button.pack(fill="x", pady=2)
             self.action_buttons[key] = button
 
+        # Always says what is missing. Packed before the secondary buttons so
+        # it sits directly under the numbered steps it is talking about.
+        self.next_label = tk.Label(
+            frame, text="", anchor="w", justify="left", bg=CANVAS, fg=ACTION,
+            wraplength=self.px(300),
+            font=(self.ui_font, self.base_pt, "bold"))
+        self.next_label.pack(fill="x", pady=(6, 0))
+
         extras = ttk.Frame(frame)
         extras.pack(fill="x", pady=(4, 0))
         for key, command in (("scan", self._scan_peak), ("clear", self._clear)):
@@ -457,13 +483,26 @@ class App(ScreenFit, tk.Tk):
         it should have been standards, and the fix should be one click.
         """
         wanted = self.role.get()
-        if self.roles.get(name) == wanted:
+        previous = self.roles.get(name)
+        if previous == wanted:
             self.roles.pop(name, None)
             self.concentrations.pop(name, None)
             self.names.pop(name, None)
         else:
             self.roles[name] = wanted
-        self._invalidate()
+
+        # Only the blank and the standards can invalidate a curve. Marking a
+        # sample cannot: the curve was measured from other wells and still
+        # describes them.
+        #
+        # This threw the curve away on every click, which made the program's
+        # own three steps impossible to walk in order -- fit the curve, mark
+        # the samples it was fitted for, and the curve is gone. Every
+        # automated test marked its samples before reading anything, which is
+        # the one order that hides it. Gabo found it in about a minute of
+        # clicking.
+        if STANDARD in (previous, wanted) or BLANK in (previous, wanted):
+            self._invalidate()
         self._refresh_state()
 
     def _edit_well(self, name: str) -> None:
@@ -570,6 +609,7 @@ class App(ScreenFit, tk.Tk):
         self._refresh_wells()
         self._refresh_curve()
         self._refresh_actions()
+        self.next_label.configure(text=self._next_step())
 
     def _refresh_roles(self) -> None:
         for role, button in self.role_buttons.items():
@@ -678,6 +718,44 @@ class App(ScreenFit, tk.Tk):
             else:
                 button.configure(state="normal", bg=ACTION_IDLE,
                                  fg=ACTION_IDLE_INK, hover=ACTION_IDLE_HOVER)
+
+    def _next_step(self) -> str:
+        """The one thing standing between her and the next read.
+
+        Written as a single sentence naming an action, in the order the steps
+        actually unlock, so the answer to "why is that button dead" is always
+        on screen rather than inferable from which buttons are dead.
+        """
+        if self.backend is None or self.lost:
+            return TEXT["next_no_reader"]
+        if self._wavelengths() is None:
+            return TEXT["next_bad_wavelength"]
+
+        if self.blank_value is None:
+            if not self._wells_for(BLANK):
+                return TEXT["next_mark_blank"]
+            return TEXT["next_read_blank"]
+
+        standards = self._wells_for(STANDARD)
+        if len(standards) < curve.MIN_STANDARDS:
+            return TEXT["next_mark_standards"].format(
+                need=curve.MIN_STANDARDS, have=len(standards))
+        missing = self._missing_concentrations()
+        if missing:
+            return TEXT["next_concentrations"].format(
+                wells=", ".join(missing))
+        if self.fit is None:
+            return TEXT["next_read_standards"]
+        if not self.fit.usable:
+            return TEXT["next_curve_bad"]
+
+        if not self._wells_for(SAMPLE):
+            if self.results:
+                return TEXT["next_save"]
+            return TEXT["next_mark_samples"]
+        if self.results:
+            return TEXT["next_save"]
+        return TEXT["next_read_samples"]
 
     def _say(self, message: str) -> None:
         self.status.configure(text=message)
