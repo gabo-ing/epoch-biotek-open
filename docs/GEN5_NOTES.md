@@ -123,6 +123,43 @@ So `epoch-multispectral`'s untested flat-plate path is no longer untested in
 the part that could silently aim the optics at nothing. It still has never
 driven the instrument.
 
+## Gen5 reading a plain 96-well plate, 3 November 2026
+
+It does. The question was open because this project had only ever seen Gen5
+drive a Take3, and `epoch-multispectral` addresses an ordinary flat plate
+that nothing had confirmed the instrument would read.
+
+**The read step.** Detection method Absorbance, read type Endpoint, read
+speed Normal, pathlength correction available but unticked. Dataset names
+follow `<step label>:<wavelength>`, so a step labelled "530" reading three
+wavelengths produces `530:530`, `530:560` and `530:590`.
+
+**Wavelengths per read: six.** The selector offers 1 to 6 and stops. The
+protocol's own count field holds a single digit, so nine would fit, and nine
+is what `curve.SCAN_NM` asked for until this screenshot. Whether the
+instrument accepts seven is untested; the software written by the people who
+built it never asks, so the peak scan now asks for six as well -- 490 to 590
+at 20 nm, bracketing 530 symmetrically.
+
+**Read speed** is a setting this project does not expose at all. Noted rather
+than acted on; "Normal" is what Gen5 uses and what the reader presumably
+defaults to.
+
+### The empty-plate baseline
+
+A brand-new, unopened Jet Biofil TCP011096 read dry across all 96 wells:
+
+| | |
+|---|---|
+| range | 0.045 - 0.049 AU |
+| spread | 0.004 AU across the whole plate |
+
+That is the plate's own absorbance with nothing in it, and it is flat enough
+that the plate contributes no meaningful well-to-well variation. It is also a
+reference number: an empty plate of this type read in `epoch-multispectral`
+should land in the same place, and if it does not, the flat-plate geometry is
+wrong.
+
 ## What is still worth doing on the trial laptop
 
 The blanking experiment in `docs/BLANK_THRESHOLD.md` has lost most of its

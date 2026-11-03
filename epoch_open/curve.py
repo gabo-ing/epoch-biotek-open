@@ -52,10 +52,18 @@ DEFAULT_NM = 530
 DEFAULT_REFERENCE_NM = 650
 
 # A spread of visible wavelengths for finding where the product actually
-# absorbs. Nine because the reader takes at most nine in a single pass -- the
-# wavelength count field in the 'D' assay record holds one digit -- so this
-# costs exactly one read.
-SCAN_NM = (490, 505, 520, 530, 545, 560, 575, 590, 605)
+# absorbs, in one read.
+#
+# Six, not nine. The count field in the 'D' assay record holds a single digit,
+# so nine *fit the protocol*, and that is what this was until Gabo
+# photographed Gen5's Read Step dialog on 3 November 2026: its wavelength
+# selector offers 1 to 6 and stops. Whether the instrument would accept seven
+# is unknown, and the software written by the people who built it never asks,
+# which is reason enough not to find out during an assay.
+#
+# Six at 20 nm spacing covers 490-590 and brackets 530 symmetrically, which is
+# about the resolution a Gaussian absorption band perhaps 40 nm wide deserves.
+SCAN_NM = (490, 510, 530, 550, 570, 590)
 
 # Least-squares needs two points for a line and a third before r-squared says
 # anything at all: with two points it is exactly 1 whatever they are, which

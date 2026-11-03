@@ -224,27 +224,31 @@ class TestTheReference:
 
 class TestFindingThePeak:
 
-    def test_the_scan_fits_one_read(self):
-        """Nine wavelengths, because the reader takes nine in a single pass.
+    def test_the_scan_asks_for_no_more_than_gen5_does(self):
+        """Six, which is where Gen5's own Read Step dialog stops.
 
-        The limit is the wavelength-count field in the 'D' assay record, which
-        holds a single digit; see epoch_open/reader.py.
+        Nine fit the protocol -- the wavelength-count field in the 'D' assay
+        record holds one digit -- and nine is what this was until Gen5's read
+        dialog was photographed on 3 November 2026 and turned out to offer
+        1 to 6. Whether the instrument accepts seven is untested, and the
+        vendor's own software never asks, so neither do we.
         """
-        assert len(curve.SCAN_NM) == 9
+        assert len(curve.SCAN_NM) == 6
+        assert len(curve.SCAN_NM) <= 9, "the protocol could not carry more"
 
     def test_the_scan_brackets_the_default_wavelength(self):
         assert curve.SCAN_NM[0] < curve.DEFAULT_NM < curve.SCAN_NM[-1]
 
     def test_it_reports_where_the_colour_actually_absorbed(self):
-        readings = {490: 0.10, 505: 0.22, 520: 0.40, 530: 0.44, 545: 0.31,
-                    560: 0.18, 575: 0.09, 590: 0.04, 605: 0.02}
+        readings = {490: 0.10, 510: 0.28, 530: 0.44, 550: 0.31,
+                    570: 0.12, 590: 0.04}
         assert curve.peak_wavelength(readings) == 530
 
     def test_a_peak_elsewhere_is_reported_honestly(self):
         """The point of scanning is to be told when 530 is the wrong default."""
-        readings = {490: 0.10, 505: 0.20, 520: 0.35, 530: 0.40, 545: 0.52,
-                    560: 0.48, 575: 0.20, 590: 0.05, 605: 0.01}
-        assert curve.peak_wavelength(readings) == 545
+        readings = {490: 0.10, 510: 0.24, 530: 0.40, 550: 0.52,
+                    570: 0.22, 590: 0.05}
+        assert curve.peak_wavelength(readings) == 550
 
     def test_an_unread_scan_is_an_error_not_a_guess(self):
         try:
