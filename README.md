@@ -52,7 +52,8 @@ plain transparent 96-well plate -- see `docs/MULTISPECTRAL.md`.
 | Take3 GUI (`epoch_open/gui.py`) | Working against the real instrument |
 | Shared chrome + window fitting (`epoch_open/ui.py`) | Done -- palette, drawn buttons, screen fitting, ttk theme |
 | Curve math (`epoch_open/curve.py`) | Done -- least squares, r2, residuals, range warnings |
-| Multispectral GUI (`epoch_open/gui_curve.py`) | Written and tested on the simulator; **not yet run against the instrument** |
+| Multispectral GUI (`epoch_open/gui_curve.py`) | Reads a flat 96-well plate on the real instrument; agrees with Gen5 to 0.001 AU, addressing verified with a loaded pattern |
+| Colorimetric assay itself | **Unverified** -- no standard curve has been measured on real reagents |
 | Protocol capture procedure (`docs/CAPTURE.md`) | No longer needed |
 | Serial protocol decode | **Done** — reads confirmed on the instrument |
 | USB transport | **Solved** — reader is FTDI virtual COM, pyserial talks to it (`docs/FINDINGS.md`) |

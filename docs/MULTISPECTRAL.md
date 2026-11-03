@@ -10,11 +10,56 @@ the same run. Written for the Salkowski assay for indole-3-acetic acid at
 column 2 with each well showing its concentration, samples in columns 3-4.
 The amber badge is the simulator saying so.*
 
-**Status: works against the simulator, not yet run against the instrument.**
-The read path it uses (`EpochReader.read_plate`) is the same single-pass read
-the Take3 program has used since 2026-10-22, with the plate geometry made a
-parameter — but no colorimetric plate has yet been through it. The first real
-run should be treated as a commissioning run, not as data.
+**Status: the read path is verified against the instrument (3 November 2026).
+The assay is not.**
+
+The program drives the reader, addresses a flat 96-well plate correctly, and
+agrees with Gen5 on the same plate to the last digit Gen5 prints. What has
+*not* happened is a real assay: no standard curve has been measured on real
+reagents, so `curve.py` has still only ever seen numbers this project made up.
+
+### What was verified
+
+**Agreement with Gen5.** An empty plate read minutes apart by both programs at
+560 nm: 85 of 96 wells identical to three decimals, largest disagreement
+0.0010 AU, mean signed difference -0.00005. See `docs/GEN5_NOTES.md`.
+
+**Addressing.** An empty plate cannot prove the beam lands on the right
+wells -- uniform readings look perfect whatever the geometry does. So a
+deliberately asymmetric pattern was loaded: diluted coffee down column 1 and
+along row H to H10, allulose sweetener in H11 and H12, everything else dry.
+
+| | 530 nm |
+|---|---|
+| 17 coffee wells | 0.1715 - 0.1859, mean 0.1787 |
+| 77 dry wells | 0.0455 - 0.0497, mean 0.0474 |
+| separation | **+0.1218 AU** between the weakest loaded and strongest dry well |
+
+Every loaded well read higher than every dry one, with no overlap, and the
+set of wells reading high was **exactly** the set that had been pipetted --
+none missing, none spurious. The geometry addresses a flat 96-well plate
+correctly.
+
+### Two things that fell out of it
+
+**A colourless liquid reads lower than air.** The allulose wells came back at
+0.0395 and 0.0390 against 0.0474 for the dry wells -- about 0.008 AU *below*
+empty, and flat across 530/560/590 as a non-absorbing solution should be.
+Filling a well changes its optics whether or not anything in it absorbs.
+
+The practical consequence is for the assay, not the software: **every well
+must hold the same volume**, including blanks. An under-filled well is not
+merely missing sample, it reads as though it had absorbance of its own, in
+the direction that would look like *less* colour.
+
+It is also why water is a poor choice for this test. Water against air would
+have given roughly 0.008 AU in a counterintuitive direction; the coffee gave
+0.12 AU in the obvious one.
+
+**The coffee spectrum is physically sensible.** 0.179 at 530, 0.150 at 560,
+0.131 at 590 -- a smooth decline towards the red, which is what a brown
+solution should do, and a weak confirmation that the three wavelengths are
+really the three wavelengths.
 
 ## Do not use the Take3 plate
 
@@ -187,7 +232,8 @@ installing a fit directly. That case is only reachable with hardware.
 
 ## First real run
 
-Worth doing deliberately, since nothing here has met the instrument:
+The instrument side is done; what follows is the assay side, which is still
+entirely unverified:
 
 1. `python3 run_multispectral.py` and check the badge goes green with serial
    254717.
