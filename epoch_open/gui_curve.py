@@ -245,7 +245,7 @@ class App(ScreenFit, tk.Tk):
         )
         self.status.pack(fill="x", side="bottom")
 
-        body = ttk.Frame(self, padding=8)
+        body = ttk.Frame(self, padding=4 if self.tiny else 8)
         body.pack(fill="both", expand=True)
 
         left = ttk.Frame(body)
@@ -276,7 +276,7 @@ class App(ScreenFit, tk.Tk):
 
         self.banner = tk.Label(bar, padx=14, pady=7,
                                font=(self.ui_font, self.base_pt, "bold"))
-        self.banner.pack(side="right", padx=14, pady=8)
+        self.banner.pack(side="right", padx=14, pady=3 if self.tiny else 8)
         self._refresh_banner()
 
     def _refresh_banner(self) -> None:
@@ -296,7 +296,8 @@ class App(ScreenFit, tk.Tk):
         self.banner.configure(text=text, bg=bg, fg=fg)
 
     def _build_settings(self, parent) -> None:
-        frame = ttk.LabelFrame(parent, text=TEXT["settings"], padding=8,
+        frame = ttk.LabelFrame(parent, text=TEXT["settings"],
+                               padding=5 if self.tiny else 8,
                                style="Card.TLabelframe")
         frame.pack(fill="x", pady=(0, 8))
 
@@ -327,10 +328,14 @@ class App(ScreenFit, tk.Tk):
                       wraplength=self.px(340)).pack(anchor="w", pady=(4, 0))
 
         # The one thing in this program that can damage the other one.
+        # Wrapped wider and padded less on a short screen: the warning has to
+        # stay, but three bold lines in a tall box is 59 px that the save
+        # button needs more.
         tk.Label(frame, text=TEXT["take3_warning"], bg=BAD_WELL, fg=BAD_WELL_INK,
-                 wraplength=self.px(340), justify="left", padx=8, pady=6,
+                 wraplength=self.px(400 if self.tiny else 340),
+                 justify="left", padx=8, pady=3 if self.tiny else 6,
                  font=(self.ui_font, self.base_pt - 1, "bold"),
-                 ).pack(fill="x", pady=(8, 0))
+                 ).pack(fill="x", pady=(4 if self.tiny else 8, 0))
 
     def _build_plate(self, parent) -> None:
         frame = ttk.LabelFrame(parent, text=TEXT["plate"],
@@ -339,7 +344,7 @@ class App(ScreenFit, tk.Tk):
         frame.pack(fill="x")
 
         roles = ttk.Frame(frame, style="Card.TFrame")
-        roles.pack(fill="x", pady=(0, 6))
+        roles.pack(fill="x", pady=(0, 3 if self.tiny else 6))
         ttk.Label(roles, text=TEXT["roles"], style="CardMuted.TLabel").pack(
             side="left", padx=(0, 8))
         self.role_buttons = {}
@@ -357,7 +362,7 @@ class App(ScreenFit, tk.Tk):
         grid.pack()
 
         well_w = self.px(34 if self.compact else 40)
-        well_h = self.px(18 if self.tiny else (20 if self.compact else 24))
+        well_h = self.px(15 if self.tiny else (20 if self.compact else 24))
 
         for index, column in enumerate(COLUMNS):
             ttk.Label(grid, text=str(column), width=4, anchor="center",
@@ -398,24 +403,25 @@ class App(ScreenFit, tk.Tk):
         for key, command in steps:
             button = RoundedButton(
                 frame, text=TEXT[key], width=self.px(300),
-                height=self.px(26 if self.compact else 32), radius=self.px(5),
-                parent_bg=CANVAS, stretch=True,
+                height=self.px(23 if self.tiny else
+                               (26 if self.compact else 32)),
+                radius=self.px(5), parent_bg=CANVAS, stretch=True,
                 font=(self.ui_font, self.base_pt, "bold"),
                 command=command,
             )
-            button.pack(fill="x", pady=2)
+            button.pack(fill="x", pady=1 if self.tiny else 2)
             self.action_buttons[key] = button
 
         # Always says what is missing. Packed before the secondary buttons so
         # it sits directly under the numbered steps it is talking about.
         self.next_label = tk.Label(
             frame, text="", anchor="w", justify="left", bg=CANVAS, fg=ACTION,
-            wraplength=self.px(300),
+            wraplength=self.px(420 if self.tiny else 300),
             font=(self.ui_font, self.base_pt, "bold"))
-        self.next_label.pack(fill="x", pady=(6, 0))
+        self.next_label.pack(fill="x", pady=(3 if self.tiny else 6, 0))
 
         extras = ttk.Frame(frame)
-        extras.pack(fill="x", pady=(4, 0))
+        extras.pack(fill="x", pady=(2 if self.tiny else 4, 0))
         for key, command in (("scan", self._scan_peak), ("clear", self._clear)):
             button = RoundedButton(
                 extras, text=TEXT[key], width=self.px(146),
@@ -428,9 +434,10 @@ class App(ScreenFit, tk.Tk):
             self.action_buttons[key] = button
 
     def _build_curve(self, parent) -> None:
-        frame = ttk.LabelFrame(parent, text=TEXT["curve"], padding=8,
+        frame = ttk.LabelFrame(parent, text=TEXT["curve"],
+                               padding=5 if self.tiny else 8,
                                style="Card.TLabelframe")
-        frame.pack(fill="x", pady=(0, 8))
+        frame.pack(fill="x", pady=(0, 4 if self.tiny else 8))
 
         self.curve_fields = {}
         grid = ttk.Frame(frame, style="Card.TFrame")

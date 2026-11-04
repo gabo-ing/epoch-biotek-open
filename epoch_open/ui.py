@@ -262,8 +262,19 @@ class ScreenFit:
 
         # Readable at arm's length on a roomy screen, but a cramped laptop needs
         # the space more than it needs the extra point.
-        self.tiny = logical_h < 760
-        self.compact = logical_h < 1000
+        # Decided from the whole screen, not the work area, and with the
+        # threshold above 768.
+        #
+        # Both of those are the same bug, found on a 1366x768 laptop on
+        # 4 November 2026. The tier came from the work area, so hiding the
+        # taskbar moved it from 728 to 768 and across the old threshold of
+        # 760 -- the program answered 40 px of extra screen by switching to a
+        # layout about 100 px taller, and the save button went further off the
+        # bottom than before. A toggling taskbar must not change which layout
+        # is drawn, and a 768-tall screen is a short screen either way.
+        panel_h = self.winfo_screenheight() / self.scale
+        self.tiny = panel_h < 800
+        self.compact = panel_h < 1000
         self.base_pt = 10 if self.compact else 11
         self.ui_font = self._pick_font()
 

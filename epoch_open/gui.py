@@ -291,7 +291,7 @@ class App(ScreenFit, tk.Tk):
         )
         self.status.pack(fill="x", side="bottom")
 
-        body = ttk.Frame(self, padding=8)
+        body = ttk.Frame(self, padding=4 if self.tiny else 8)
         body.pack(fill="both", expand=True)
 
         left = ttk.Frame(body)
@@ -336,7 +336,7 @@ class App(ScreenFit, tk.Tk):
         # notification pill does, rather than being a full-width stripe.
         self.banner = tk.Label(bar, padx=14, pady=7,
                                font=(self.ui_font, self.base_pt, "bold"))
-        self.banner.pack(side="right", padx=14, pady=8)
+        self.banner.pack(side="right", padx=14, pady=3 if self.tiny else 8)
         self._refresh_banner()
 
     def _refresh_banner(self) -> None:
@@ -424,7 +424,7 @@ class App(ScreenFit, tk.Tk):
                 name = f"{row_letter}{column}"
                 button = RoundedButton(
                     grid, text=name, width=self.px(72),
-                    height=self.px(20 if self.tiny else
+                    height=self.px(17 if self.tiny else
                                    (22 if self.compact else 28)),
                     radius=self.px(4),
                     bg=EMPTY, fg=WELL_INK, outline=WELL_LINE,
@@ -477,42 +477,53 @@ class App(ScreenFit, tk.Tk):
         because this column is narrow.
         """
         box = ttk.Frame(parent, style="Card.TFrame")
-        box.pack(fill="x", pady=(6, 0))
+        box.pack(fill="x", pady=(3 if self.tiny else 6, 0))
 
         self.blank_fields: dict[str, ttk.Label] = {}
         fields = (("date", TEXT["blank_field_date"]),
                   ("time", TEXT["blank_field_time"]),
                   ("state", TEXT["blank_field_state"]),
                   ("cv", TEXT["blank_field_cv"]))
-        for row, (key, label) in enumerate(fields):
+
+        # Two columns on a short screen, four stacked rows otherwise. This
+        # block is the reason the blank grid stands 88 px taller than the
+        # sample grid beside it, and on a 1366x768 laptop those 88 px were
+        # part of what pushed the save button off the bottom of the window.
+        per_column = 2 if self.tiny else 4
+        for index, (key, label) in enumerate(fields):
+            row, column = index % per_column, (index // per_column) * 2
             ttk.Label(box, text=label, style="CardMuted.TLabel").grid(
-                row=row, column=0, sticky="w")
+                row=row, column=column, sticky="w",
+                padx=(0 if column == 0 else 10, 0))
             value = ttk.Label(box, text="-", style="Card.TLabel")
-            value.grid(row=row, column=1, sticky="w", padx=(6, 0))
+            value.grid(row=row, column=column + 1, sticky="w", padx=(6, 0))
             self.blank_fields[key] = value
 
 
     def _build_buttons(self, parent) -> None:
         frame = ttk.Frame(parent)
-        frame.pack(fill="x", pady=(3 if self.compact else 6, 0))
+        frame.pack(fill="x", pady=(1 if self.tiny else
+                                   (3 if self.compact else 6), 0))
 
         self.blank_label = ttk.Label(frame, text="", style="Bad.TLabel")
         self.blank_label.pack()
         self.batch_label = ttk.Label(frame, text="", style="Muted.TLabel")
-        self.batch_label.pack(pady=(0, 4 if self.compact else 8))
+        self.batch_label.pack(pady=(0, 2 if self.tiny else
+                                    (4 if self.compact else 8)))
 
         for key, command in (("read_blank", self._read_blank),
                              ("read_samples", self._read_samples),
                              ("end_batch", self._end_batch)):
             button = RoundedButton(
                 frame, text=TEXT[key], command=command,
-                height=self.px(30 if self.tiny else (34 if self.compact else 42)),
+                height=self.px(26 if self.tiny else (34 if self.compact else 42)),
                 radius=self.px(6),
                 bg=ACTION, fg=ACTION_INK, hover=ACTION_HOVER,
                 parent_bg=CANVAS, stretch=True,
                 font=(self.ui_font, self.base_pt + 1, "bold"),
             )
-            button.pack(fill="x", pady=2 if self.compact else 3)
+            button.pack(fill="x", pady=1 if self.tiny else
+                        (2 if self.compact else 3))
             self.action_buttons[key] = button
 
     def _build_results(self, parent) -> None:

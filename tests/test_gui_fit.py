@@ -156,3 +156,98 @@ class TestTheStatusBarSurvivesASqueeze:
                 "the status bar is packed last, so it is squeezed first")
         finally:
             app.destroy()
+
+
+class TestItFitsASmallLaptop:
+    """1366x768 is the screen this software is actually used on.
+
+    Reported on 4 November 2026: the window did not fit, and hiding the
+    taskbar made it *worse* -- the save button went further off the bottom.
+    Both halves of that were real.
+
+    The layout needed about 724 px where a taskbar leaves 728 and a window
+    title bar eats into it, so the bottom of the left column -- the "Fin del
+    lote (guardar Excel)" button -- was clipped. And the compact/roomy tier
+    was chosen from the *work area*, so hiding the taskbar moved it from 728
+    to 768, past the old threshold of 760, and the program answered 40 px of
+    extra screen by drawing a layout about 100 px taller.
+
+    The screen is faked here rather than required, so this runs anywhere.
+    """
+
+    SCREEN = (1366, 768)
+    TASKBAR = 40
+
+    def _on_small_screen(self, work_h):
+        """Build both windows believing they are on a small laptop."""
+        from epoch_open import gui, gui_curve, ui
+        from epoch_open.reader import MockCurveReader, MockReader
+
+        real_area = ui.ScreenFit._work_area
+        real_height = getattr(ui.ScreenFit, "winfo_screenheight", None)
+        ui.ScreenFit._work_area = lambda self: (self.SCREEN[0], work_h)
+        ui.ScreenFit.SCREEN = self.SCREEN
+        ui.ScreenFit.winfo_screenheight = lambda self: self.SCREEN[1]
+        try:
+            built = []
+            for build in (lambda: gui.App(MockReader()),
+                          lambda: gui_curve.App(MockCurveReader())):
+                app = build()
+                app.update_idletasks()
+                built.append((app, app.winfo_reqheight(), app.tiny))
+                app.destroy()
+            return built
+        finally:
+            ui.ScreenFit._work_area = real_area
+            if real_height is None:
+                del ui.ScreenFit.winfo_screenheight
+            else:
+                ui.ScreenFit.winfo_screenheight = real_height
+
+    def test_both_windows_fit_with_the_taskbar_showing(self):
+        if not IMPORTED:
+            return
+        try:
+            built = self._on_small_screen(self.SCREEN[1] - self.TASKBAR)
+        except Exception:        # no display
+            return
+        work_h = self.SCREEN[1] - self.TASKBAR
+        for _app, wants, _tiny in built:
+            assert wants <= work_h, (
+                f"the layout needs {wants} px where only {work_h} is usable, "
+                "so the bottom of it is unreachable")
+
+    def test_hiding_the_taskbar_does_not_make_it_worse(self):
+        """The tier must not flip when a taskbar is toggled."""
+        if not IMPORTED:
+            return
+        try:
+            with_bar = self._on_small_screen(self.SCREEN[1] - self.TASKBAR)
+            without = self._on_small_screen(self.SCREEN[1])
+        except Exception:
+            return
+
+        for (_a, cramped, tiny_a), (_b, roomy, tiny_b) in zip(with_bar, without):
+            assert tiny_a == tiny_b, (
+                "hiding the taskbar changed which layout is drawn")
+            assert roomy <= cramped, (
+                f"with more screen the layout grew from {cramped} to {roomy}")
+
+    def test_there_is_real_headroom_not_a_pixel_or_two(self):
+        """Windows draws these fonts taller than the machine this is tested on.
+
+        The exact height cannot be predicted from here, so the compact layout
+        is checked for a margin wide enough to absorb the difference rather
+        than for a bare fit.
+        """
+        if not IMPORTED:
+            return
+        try:
+            built = self._on_small_screen(self.SCREEN[1] - self.TASKBAR)
+        except Exception:
+            return
+        work_h = self.SCREEN[1] - self.TASKBAR
+        for _app, wants, _tiny in built:
+            assert work_h - wants >= 60, (
+                f"only {work_h - wants} px spare; a platform with taller "
+                "fonts would clip the bottom again")
