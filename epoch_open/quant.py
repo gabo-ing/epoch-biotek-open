@@ -357,20 +357,29 @@ def blank_cv_percent(blanks: dict[str, RawWell], wavelength: int = 260) -> float
     bubble, or a drop that did not bridge the gap, and every concentration
     computed from them inherits the problem.
 
-    This is the number the technician is used to reading, so it is computed the
-    way Gen5 reports it: on the **raw** absorbances at one wavelength, not on the
-    320 nm-corrected ones. (For deciding whether a blank is usable, `blank_spread`
-    below is the better statistic, and that is what this program gates on.)
+    Gen5 uses the **sample** standard deviation, n-1, which is what is used
+    here. Settled on 4 November 2026, having been written down as unsettlable.
 
-    Which standard deviation Gen5 uses is **not** settled by the exports we have.
-    Against the eight-well blank in Gen5_LVA_NAQ_0001 it reports 4,32 / 4,22 / 4,23
-    at 260 / 280 / 320 nm; recomputing from the printed values gives 4,60 / 4,33 /
-    4,32 with the sample SD used here and 4,31 / 4,05 / 4,04 with the population SD.
-    Neither matches throughout, and it cannot: those values are rounded to three
-    decimals, which on a ~0,045 blank moves the CV by more than the gap between the
-    two conventions. So we use the sample SD (n-1), the ordinary estimator for a
-    spread inferred from a handful of wells, and expect to agree with Gen5 to a few
-    tenths of a percentage point rather than exactly.
+    The eight-well blank in Gen5_LVA_NAQ_0001 could not decide it. Gen5
+    printed 4,32 / 4,22 / 4,23 at 260 / 280 / 320 nm; recomputing gives
+    4,60 / 4,33 / 4,32 with n-1 and 4,31 / 4,05 / 4,04 with n. Neither matched
+    throughout and neither could, because the printed absorbances are rounded
+    to three decimals, and on a ~0,045 blank that rounding moves the CV by
+    more than the gap between the two conventions.
+
+    What broke the tie was a blank with only **two** wells, in
+    Gen5_LVA_NAQ_0008 from the RNA run. The two estimators differ by a factor
+    of sqrt(2) at n=2 -- far wider than the rounding can hide. A2 and A3 read
+    0,058 and 0,053 at 260 nm, and Gen5 printed 6,35:
+
+        n-1  ->  6,37      n  ->  4,50
+
+    The remaining tenths at 280 and 320 nm are the rounding, as before. The
+    choice of convention is not.
+
+    The number is computed the way Gen5 reports it in other respects too: on
+    the **raw** absorbances at one wavelength, not the 320 nm-corrected ones.
+    It is also what the verdict gates on -- see BLANK_CV_LIMIT_PERCENT.
     """
     values = [
         b.readings[wavelength] for b in blanks.values() if wavelength in b.readings

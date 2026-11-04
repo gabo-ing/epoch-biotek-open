@@ -118,3 +118,76 @@ without certified material.
 
 **Does not establish anything about evaporation.** Fresh drops were loaded for each
 program, so the read order carries no information here.
+
+
+# Third run — RNA, 4 November 2026
+
+Six old RNA samples, Take3 plate 243819, reader 254717 on COM4. Gen5 1.11.5
+on the Dell at 10:38, this software on the same laptop at 10:42. First
+comparison on RNA: the two earlier runs were both dsDNA ladder, so the
+extinction-40 path had never been checked against anything.
+
+Also the first time this software has been seen running on Windows against
+the instrument: the badge came up green on COM4.
+
+## The samples are empty, and both programs say so
+
+| Well | Gen5 ng/uL | ours | Gen5 260/280 | ours |
+|---|---|---|---|---|
+| B2 | 20,857 | 21,9 | 2,286 | 2,20 |
+| B3 | -2,831 | -1,7 | 1,846 | 1,77 |
+| C2 | 4,840 | 6,2 | 1,119 | 1,14 |
+| C3 | -4,045 | -2,0 | 1,729 | 1,81 |
+| D2 | -1,760 | -1,0 | 1,128 | 1,22 |
+| D3 | -3,196 | -3,3 | 1,569 | 1,80 |
+
+Five of the six are negative or within a couple of ng/uL of zero, in both
+programs. One well holds about 21 ng/uL of something.
+
+**That agreement is the result, and it is worth more than the numbers.** At
+0.5 mm path 1 ng/uL of RNA is 0.001 AU, so these samples sit at or below the
+instrument's last printed digit. Two programs independently reporting
+"nothing here" from the same drops is a meaningful check even though -2,8 and
+-1,7 differ by 40%: a percentage of noise is noise.
+
+## Where the systematic offset comes from
+
+Ours reads about **+1 ng/uL higher** across the board -- +1,04 on average,
+with five of six in the same direction. That is +0,001 AU, one last digit.
+
+It is not a disagreement between the programs. **The two runs used different
+blanks.** Gen5 blanked on two wells (A2, A3; mean 0,0555 at 260 nm) and this
+software on six (A2, A3, G2, G3, H2, H3). A blank about 0,001 AU lower
+produces concentrations about 1 ng/uL higher, which is exactly what is seen.
+
+A clean comparison needs the same wells blanked in both, which was not done
+and is easy to arrange next time. Nothing here suggests the extinction-40
+path is wrong; nothing here confirms it either, because samples at the noise
+floor cannot confirm a factor.
+
+## What this does establish
+
+**Gen5 computes CV% with the sample standard deviation, n-1.** See the
+docstring of `blank_cv_percent` in `epoch_open/quant.py`: this had been
+written down as unsettlable from the exports, because three-decimal rounding
+on a ~0,045 blank moves the CV by more than the gap between the conventions.
+A two-well blank breaks that tie -- the estimators differ by sqrt(2) at n=2 --
+and Gen5 printed 6,35 where n-1 gives 6,37 and n gives 4,50.
+
+**The blanking verdict matched.** Our six-well blank came back VALIDO at
+CV 6,484%, under the limit of 10 that Gen5's own preferences carry. Under the
+absolute limits this software used before 3 November it would very likely
+have been rejected, and the technician sent back to wipe a plate Gen5 was
+happy with.
+
+## What to do differently with samples this dilute
+
+Nothing in this run is a software problem. A Take3 at 0.5 mm cannot measure
+RNA at a few ng/uL: blank scatter alone is ~0,003 AU, which is ~3 ng/uL, so
+anything below roughly 10 ng/uL is indistinguishable from the blank. The
+negative numbers are not an error -- they are what "less than the blank"
+looks like when it is reported honestly instead of clipped to zero.
+
+For samples at this level the options are a fluorometric assay, which is
+specific and works far lower, or concentrating the sample. Re-reading them
+here will reproduce the same noise.
