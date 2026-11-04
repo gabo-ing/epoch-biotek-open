@@ -10,7 +10,16 @@ reagents are acidic and the micro-spots are quartz.
 
 import sys
 
-from epoch_open.launch import start
+from epoch_open.launch import no_tkinter
+
+try:
+    # Imported by name, not through importlib: PyInstaller bundles what it
+    # can see in an import statement, and a module named only by a string is
+    # left out of the .exe. See epoch_open/launch.py.
+    from epoch_open.gui import main
+except ModuleNotFoundError as exc:
+    raise SystemExit(no_tkinter(exc))
+
 
 if __name__ == "__main__":
-    sys.exit(start("epoch_open.gui"))
+    sys.exit(main())

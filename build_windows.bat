@@ -29,6 +29,7 @@ REM executable small. If the build ever fails, delete the --exclude-module lines
 REM first: they are an optimisation, not a requirement.
 python -m PyInstaller --onefile --windowed --name EpochTake3 ^
     --hidden-import serial --hidden-import serial.tools.list_ports ^
+    --hidden-import epoch_open.gui ^
     --exclude-module unittest --exclude-module pydoc --exclude-module doctest ^
     --exclude-module pdb --exclude-module sqlite3 --exclude-module lib2to3 ^
     --exclude-module test --exclude-module distutils ^
@@ -38,6 +39,7 @@ echo.
 echo === Building EpochMultispectral.exe (2 of 2) ===
 python -m PyInstaller --onefile --windowed --name EpochMultispectral ^
     --hidden-import serial --hidden-import serial.tools.list_ports ^
+    --hidden-import epoch_open.gui_curve ^
     --exclude-module unittest --exclude-module pydoc --exclude-module doctest ^
     --exclude-module pdb --exclude-module sqlite3 --exclude-module lib2to3 ^
     --exclude-module test --exclude-module distutils ^

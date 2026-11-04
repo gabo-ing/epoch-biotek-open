@@ -126,3 +126,76 @@ class TestMissingTkinter:
         assert "run_multispectral.py" in take3
         assert "run_take3.py" in multi
         assert "Take3" in multi
+
+class TestTheLaunchersCanBeFrozen:
+    """PyInstaller bundles what it can see in an import statement.
+
+    This file is the only guard against a bug that cannot be reproduced from
+    source. On 4 November 2026 the Windows .exe died on launch with
+
+        ModuleNotFoundError: No module named 'epoch_open.gui'
+
+    while `python3 run_take3.py` worked perfectly on the same commit. The
+    launchers had been refactored to share a helper that did
+    `importlib.import_module(name)`, and a module named only by a string is
+    invisible to PyInstaller's analysis, so it was never put in the build.
+
+    371 tests passed over it. They all ran from source, where a dynamic
+    import resolves exactly as well as a static one. Nothing short of
+    building and running the executable could have caught it -- or this,
+    which checks the one property that matters: that the import is written
+    where a static analyser can find it.
+    """
+
+    LAUNCHERS = {
+        "run_take3.py": "epoch_open.gui",
+        "run_multispectral.py": "epoch_open.gui_curve",
+    }
+
+    def test_each_launcher_imports_its_window_statically(self):
+        import ast
+
+        for launcher, wanted in self.LAUNCHERS.items():
+            tree = ast.parse((ROOT / launcher).read_text())
+            imported = {node.module for node in ast.walk(tree)
+                        if isinstance(node, ast.ImportFrom) and node.module}
+            assert wanted in imported, (
+                f"{launcher} does not import {wanted} with an import "
+                "statement, so PyInstaller will leave it out of the .exe")
+
+    def test_nothing_on_the_launch_path_imports_by_string(self):
+        """importlib here means a module missing from the build.
+
+        Checked through the syntax tree rather than by searching the text,
+        because the text is full of the word: launch.py's docstring explains
+        at length why importlib must not be used here, and a test that
+        cannot tell an explanation from a call would forbid writing the
+        explanation down.
+        """
+        import ast
+
+        paths = [ROOT / name for name in self.LAUNCHERS]
+        paths.append(ROOT / "epoch_open" / "launch.py")
+        for path in paths:
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        assert not alias.name.startswith("importlib"), (
+                            f"{path.name} imports importlib on the launch path")
+                if isinstance(node, ast.ImportFrom):
+                    assert not (node.module or "").startswith("importlib"), (
+                        f"{path.name} imports from importlib on the launch path")
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    name = getattr(func, "id", None) or getattr(
+                        func, "attr", None)
+                    assert name not in ("__import__", "import_module"), (
+                        f"{path.name} imports by string on the launch path")
+
+    def test_the_build_names_the_windows_too(self):
+        """A second line of defence, in case the first is ever undone."""
+        script = (ROOT / "build_windows.bat").read_text()
+        for module in self.LAUNCHERS.values():
+            assert f"--hidden-import {module}" in script, (
+                f"build_windows.bat does not force {module} into the build")
