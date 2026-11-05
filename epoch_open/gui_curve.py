@@ -123,6 +123,8 @@ TEXT = {
     "curve_usable": "UTILIZABLE",
     "curve_unusable": "NO UTILIZABLE",
     "curve_unread": "SIN LEER",
+    "curve_others": ("Se muestra la curva de {primary} nm. Tambien hay curva "
+                     "a {others} nm, y cada muestra se calcula con la suya."),
 
     # "Lectura:Pozo" rather than the well alone, as epoch-take3 does: a batch
     # can hold the same well read twice, and two rows reading A1 with nothing
@@ -239,7 +241,10 @@ class App(ScreenFit, tk.Tk):
         # correction rather than applying one.
         self.blank_values: dict[int, float] = {}
         self.blank_time: datetime | None = None
-        self.fit = None
+        # A curve per wavelength. The standards are measured at every
+        # wavelength the read asks for, so fitting only one threw away
+        # readings the instrument had already taken.
+        self.fits: dict = {}
         self.results: list = []
         self.read_number = 0
 
@@ -591,7 +596,16 @@ class App(ScreenFit, tk.Tk):
         longer marked, which is the quiet kind of wrong this program exists to
         avoid.
         """
-        self.fit = None
+        self.fits = {}
+
+    @property
+    def fit(self):
+        """The curve a concentration is read against: the primary one.
+
+        A property, so the panel, the step gates and the export keep asking
+        for "the" curve while the rest stay reachable through `fits`.
+        """
+        return self.fits.get(self._primary())
 
     def _clear(self) -> None:
         self.roles.clear()
@@ -599,7 +613,7 @@ class App(ScreenFit, tk.Tk):
         self.names.clear()
         self.blank_values = {}
         self.blank_time = None
-        self.fit = None
+        self.fits = {}
         self._refresh_state()
 
     # ---------------------------------------------------------------- state
@@ -783,8 +797,13 @@ class App(ScreenFit, tk.Tk):
         fields["state"].configure(
             text=TEXT["curve_usable"] if fit.usable else TEXT["curve_unusable"],
             style="CardGood.TLabel" if fit.usable else "CardBad.TLabel")
-        self.curve_notes.configure(
-            text="\n".join(str(n) for n in fit.notes))
+        notes = [str(n) for n in fit.notes]
+        others = [nm for nm in sorted(self.fits) if nm != self._primary()]
+        if others:
+            notes.insert(0, TEXT["curve_others"].format(
+                primary=self._primary(),
+                others=", ".join(str(nm) for nm in others)))
+        self.curve_notes.configure(text="\n".join(notes))
 
     def _refresh_actions(self) -> None:
         can_read = self._can_read()
@@ -1033,20 +1052,28 @@ class App(ScreenFit, tk.Tk):
         # standards at others is fine and their values are kept, but a curve
         # describes one wavelength: a 530 nm calibration says nothing about
         # absorbance at 490.
-        nm, reference = self._primary(), self._reference_nm()
+        reference = self._reference_nm()
         try:
-            standards = [
-                curve.Standard(
-                    well=well,
-                    concentration=self.concentrations[well],
-                    absorbance=curve.corrected(raw[well], nm, reference)
-                    - self._blank_at(nm),
-                )
-                for well in wells
-            ]
-            self.fit = curve.fit_standards(standards, unit=self.unit.get())
+            # One set of standards per wavelength, each blanked with its own
+            # blank. The instrument measured them all; fitting only the
+            # first discarded the rest.
+            by_nm = {
+                nm: [
+                    curve.Standard(
+                        well=well,
+                        concentration=self.concentrations[well],
+                        absorbance=curve.corrected(raw[well], nm, reference)
+                        - self._blank_at(nm),
+                    )
+                    for well in wells
+                ]
+                for nm in (self._measured() or [])
+            }
+            self.fits = {nm: curve.fit_standards(standards,
+                                                 unit=self.unit.get())
+                         for nm, standards in by_nm.items()}
         except CurveError as exc:
-            self.fit = None
+            self.fits = {}
             self._refresh_state()
             messagebox.showerror(TEXT["title"], str(exc))
             return
@@ -1083,7 +1110,10 @@ class App(ScreenFit, tk.Tk):
             fresh = [
                 curve.read_against(
                     well, raw[well],
-                    self.fit if nm == primary else None,
+                    # Each wavelength against its own curve. Reading
+                    # 490 nm off a 530 nm calibration would give a plausible
+                    # number that means nothing.
+                    self.fits.get(nm),
                     wavelength=nm,
                     reference_nm=reference,
                     # No blank read means nothing is subtracted, rather than
@@ -1174,7 +1204,7 @@ class App(ScreenFit, tk.Tk):
         wavelengths = self._wavelengths() or [curve.DEFAULT_NM]
         try:
             written = export_curve(
-                path, self.results, self.fit, wavelengths,
+                path, self.results, self.fits, wavelengths,
                 unit=self.unit.get(),
                 metadata={
                     # The wavelengths are per row, and summarised by

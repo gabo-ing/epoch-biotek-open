@@ -169,3 +169,51 @@ class TestABatchReadAtTwoWavelengths:
         assert rows[1][rows[0].index("nm")] == 530
         assert rows[1][rows[0].index("Ref. nm")] == "", (
             "no reference was used, so that cell stays empty")
+
+
+class TestAWorkbookWithACurvePerWavelength:
+    """Standards measured at several wavelengths produce several curves.
+
+    Each sample row is quantified against the curve for its own wavelength,
+    so every one of those curves has to be in the file. A workbook recording
+    only the first would leave the other concentrations unauditable -- real
+    numbers, derived from a calibration nobody can see.
+    """
+
+    def _fits(self):
+        return {
+            490: curve.fit_standards([
+                curve.Standard("A2", 0, 0.000),
+                curve.Standard("B2", 5, 0.046),
+                curve.Standard("C2", 10, 0.091),
+                curve.Standard("D2", 20, 0.183),
+            ]),
+            530: curve.fit_standards(STANDARDS),
+        }
+
+    def test_every_curve_gets_its_own_block(self):
+        path = _out_dir() / "curve-per-wavelength.xlsx"
+        if path.exists():
+            path.unlink()
+        export_curve(path, [], self._fits(), [490, 530], unit="ug/mL")
+        text = _text(path)
+        assert "Curva a 490 nm" in text
+        assert "Curva a 530 nm" in text
+
+    def test_each_curve_reports_its_own_r2(self):
+        path = _out_dir() / "curve-per-wavelength-r2.xlsx"
+        if path.exists():
+            path.unlink()
+        export_curve(path, [], self._fits(), [490, 530], unit="ug/mL")
+        assert _text(path).count("r2 de la curva a") == 2
+
+    def test_a_single_curve_still_reads_as_one(self):
+        """The ordinary case must not have grown wavelength labels."""
+        path = _out_dir() / "curve-single-still.xlsx"
+        if path.exists():
+            path.unlink()
+        export_curve(path, [], curve.fit_standards(STANDARDS), [530],
+                     unit="ug/mL")
+        text = _text(path)
+        assert "Pendiente" in text
+        assert "Curva a " not in text

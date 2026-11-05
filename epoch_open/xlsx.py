@@ -349,7 +349,30 @@ def curve_to_summary(results, unit: str) -> list[list]:
     return rows
 
 
-def curve_to_fit_sheet(fit) -> list[list]:
+def curve_to_fit_sheet(fits) -> list[list]:
+    """Every curve in the run, one block each.
+
+    Takes a mapping of wavelength to fit, or a single fit for the simple
+    case. A run can hold a curve per wavelength -- the standards are
+    measured at all of them -- and a sheet that recorded only one would
+    leave the others' concentrations unauditable.
+    """
+    if fits is None:
+        return []
+    if not isinstance(fits, dict):
+        fits = {getattr(fits, "wavelength", 0): fits}
+
+    rows = []
+    for nm, fit in sorted(fits.items()):
+        if rows:
+            rows.append([])
+        if len(fits) > 1 or nm:
+            rows.append([f"Curva a {nm} nm" if nm else "Curva"])
+        rows.extend(_one_fit_sheet(fit))
+    return rows
+
+
+def _one_fit_sheet(fit) -> list[list]:
     """The standards, their residuals, and the line they produced.
 
     The fit's own misgivings are written out in full rather than summarised as
@@ -414,21 +437,28 @@ def curve_to_detail(results, fit, wavelengths) -> list[list]:
     return rows
 
 
-def export_curve(path, results, fit, wavelengths, metadata: dict | None = None,
-                 unit: str = ""):
+def export_curve(path, results, fits, wavelengths,
+                 metadata: dict | None = None, unit: str = ""):
     """Write what the run produced.
 
     Three sheets when there was a curve, two when there was not: a plain
     plate read has absorbances and no curve to record, and a Curva sheet
     describing nothing would be worse than its absence.
     """
-    summary = curve_to_summary(results, fit.unit if fit else unit)
+    # One fit, a mapping of them, or none at all.
+    if fits is not None and not isinstance(fits, dict):
+        fits = {0: fits}
+    primary = next(iter(fits.values())) if fits else None
+
+    summary = curve_to_summary(results, primary.unit if primary else unit)
 
     summary.append([])
     summary.append(["Leido el", datetime.now().strftime("%Y-%m-%d %H:%M")])
-    if fit is not None:
-        summary.append(["r2 de la curva", round(fit.r_squared, 6)])
-        summary.append(["Patrones", fit.n])
+    if fits:
+        for nm, fit in sorted(fits.items()):
+            label = f"r2 de la curva a {nm} nm" if nm else "r2 de la curva"
+            summary.append([label, round(fit.r_squared, 6)])
+        summary.append(["Patrones", primary.n])
     else:
         summary.append(["Curva", "ninguna: lectura directa en absorbancia"])
 
@@ -443,8 +473,8 @@ def export_curve(path, results, fit, wavelengths, metadata: dict | None = None,
         summary.append([key, value])
 
     sheets = [("Resumen", summary, CURVE_SUMMARY_WIDTHS)]
-    if fit is not None:
-        sheets.append(("Curva", curve_to_fit_sheet(fit), CURVE_FIT_WIDTHS))
+    if fits:
+        sheets.append(("Curva", curve_to_fit_sheet(fits), CURVE_FIT_WIDTHS))
     sheets.append(
-        ("Detalle", curve_to_detail(results, fit, wavelengths), None))
+        ("Detalle", curve_to_detail(results, primary, wavelengths), None))
     return write_workbook(path, sheets)

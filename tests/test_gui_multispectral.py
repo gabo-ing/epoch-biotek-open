@@ -429,13 +429,13 @@ class TestWhatTheScreenSays:
             app.blank_values = {}
             # Four standards on a line and one well off it, which is what a
             # standard diluted wrong actually looks like.
-            app.fit = curve.fit_standards([
+            app.fits = {app._primary(): curve.fit_standards([
                 curve.Standard("A2", 0, 0.000),
                 curve.Standard("B2", 5, 0.100),
                 curve.Standard("C2", 10, 0.200),
                 curve.Standard("D2", 20, 0.250),
                 curve.Standard("E2", 40, 0.800),
-            ])
+            ])}
             named = [n.well for n in app.fit.notes if n.well]
             assert named == ["D2"], f"singled out {named} instead of D2"
 
@@ -805,7 +805,7 @@ class TestSeveralWavelengthsInOneRead:
         finally:
             app.destroy()
 
-    def test_only_the_first_wavelength_gets_a_concentration(self):
+    def test_each_wavelength_is_quantified_against_its_own_curve(self):
         app = _app()
         if app is None:
             return
@@ -824,11 +824,19 @@ class TestSeveralWavelengthsInOneRead:
             app._refresh_state()
             app._read_samples()
 
+            assert sorted(app.fits) == [490, 530], (
+                "the standards were measured at both, so both get a curve")
+
             by_nm = {r.wavelength: r for r in app.results}
-            assert by_nm[530].concentration is not None, (
-                "the curve's own wavelength must quantify")
-            assert by_nm[490].concentration is None, (
-                "a 530 nm curve cannot report a concentration at 490 nm")
+            assert by_nm[530].concentration is not None
+            assert by_nm[490].concentration is not None, (
+                "490 nm has its own curve and should use it")
+
+            # And it must be its OWN curve, not the other one's.
+            at_490 = app.fits[490].concentration_for(by_nm[490].absorbance)
+            assert abs(by_nm[490].concentration - at_490) < 1e-9
+            assert app.fits[490].slope != app.fits[530].slope, (
+                "the two curves describe different wavelengths")
         finally:
             app.destroy()
 

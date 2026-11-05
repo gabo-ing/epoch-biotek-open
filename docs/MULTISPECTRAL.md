@@ -141,10 +141,21 @@ them.
 Six is the limit, counting the reference. Gen5's own dialog offers one to six
 and stops; see `curve.MOST_WAVELENGTHS`.
 
-**The first wavelength is the one the curve belongs to.** A calibration
-measured at 530 nm says nothing about absorbance at 490, so the other
-wavelengths come back as absorbance with no concentration — the same rule as
-a read with no curve at all, for the same reason.
+**Each wavelength gets its own curve.** The standards are measured at every
+wavelength the read asks for, so a curve is fitted at every one of them, and
+each sample row is quantified against the curve for its own wavelength.
+Reading 490 nm off a 530 nm calibration would give a plausible number meaning
+nothing, so it is never done.
+
+The first wavelength is only "primary" in the sense that its curve is the one
+the panel shows and the step gates judge; the others are in the workbook,
+each with its own block and its own r².
+
+A useful consequence: the same sample quantified at two wavelengths, through
+two independently fitted curves, should agree. In a simulated run at 490 and
+530 nm it comes out as 6.86 and 6.78 µg/mL. Disagreement between them is
+worth looking at — it means one of the curves, or one of the readings, is not
+describing what you think.
 
 **The blank is kept per wavelength.** A blank read at 490 nm says nothing
 about 530, and subtracting it there would be inventing a correction rather
