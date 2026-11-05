@@ -810,6 +810,28 @@ class App(ScreenFit, tk.Tk):
             return TEXT["next_save"]
         return TEXT["next_read_samples"]
 
+    def _busy(self) -> None:
+        """Grey every action out for the duration of a read.
+
+        A read blocks the event loop, so a second press does not go nowhere:
+        it waits in the queue and fires the moment the first read returns.
+        One intended press, two reads, and at a couple of minutes a plate
+        that is not a small waste.
+
+        Gloved fingers on a trackpad produce exactly that, which is how it
+        was found -- a blank read twice from one press at the bench on
+        5 November 2026, and once when the same button was pressed again
+        bare-handed.
+
+        Disabling swallows it: RoundedButton ignores a press unless its state
+        is normal, so the queued click lands on a dead button and stops there.
+        The states are restored by the _refresh_state that every read path
+        ends with, including the failures.
+        """
+        for button in self.action_buttons.values():
+            button.configure(state="disabled")
+        self.update_idletasks()
+
     def _say(self, message: str) -> None:
         self.status.configure(text=message)
         self.update_idletasks()
@@ -869,6 +891,7 @@ class App(ScreenFit, tk.Tk):
             return
 
         self._say(TEXT["reading"])
+        self._busy()
         try:
             raw = self._read(wells, wavelengths)
         except (ReaderError, CurveError, NotImplementedError, OSError) as exc:
@@ -908,6 +931,7 @@ class App(ScreenFit, tk.Tk):
 
         wavelengths = self._wavelengths()
         self._say(TEXT["reading"])
+        self._busy()
         try:
             raw = self._read(wells, wavelengths)
         except (ReaderError, NotImplementedError, OSError) as exc:
@@ -947,6 +971,7 @@ class App(ScreenFit, tk.Tk):
 
         wavelengths = self._wavelengths()
         self._say(TEXT["reading"])
+        self._busy()
         try:
             raw = self._read(wells, wavelengths)
         except (ReaderError, NotImplementedError, OSError) as exc:
@@ -993,6 +1018,7 @@ class App(ScreenFit, tk.Tk):
             return
 
         self._say(TEXT["reading"])
+        self._busy()
         try:
             raw = self._read(wells, list(curve.SCAN_NM))
         except (ReaderError, NotImplementedError, OSError) as exc:

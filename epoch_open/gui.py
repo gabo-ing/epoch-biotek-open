@@ -864,6 +864,28 @@ class App(ScreenFit, tk.Tk):
             return TEXT["no_reader_hint"]
         return TEXT["instructions_short"] if self.compact else TEXT["instructions"]
 
+    def _busy(self) -> None:
+        """Grey every action out for the duration of a read.
+
+        A read blocks the event loop, so a second press does not go nowhere:
+        it waits in the queue and fires the moment the first read returns.
+        One intended press, two reads, and at a couple of minutes a plate
+        that is not a small waste.
+
+        Gloved fingers on a trackpad produce exactly that, which is how it
+        was found -- a blank read twice from one press at the bench on
+        5 November 2026, and once when the same button was pressed again
+        bare-handed.
+
+        Disabling swallows it: RoundedButton ignores a press unless its state
+        is normal, so the queued click lands on a dead button and stops there.
+        The states are restored by the _refresh_state that every read path
+        ends with, including the failures.
+        """
+        for button in self.action_buttons.values():
+            button.configure(state="disabled")
+        self.update_idletasks()
+
     def _say(self, message: str) -> None:
         self.status.configure(text=message)
         self.update_idletasks()
@@ -995,10 +1017,14 @@ class App(ScreenFit, tk.Tk):
             return
 
         self._say(TEXT["reading"])
+        self._busy()
         try:
             raw = self._read(wells, as_blank=True)
         except (ReaderError, NotImplementedError, OSError) as exc:
             self._mark_lost()
+            # Not only the banner: _busy() greyed every action out before the
+            # read, and without this they would stay dead after a failure.
+            self._refresh_state()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
             self._say(self._idle_text())
             return
@@ -1032,10 +1058,14 @@ class App(ScreenFit, tk.Tk):
             return
 
         self._say(TEXT["reading"])
+        self._busy()
         try:
             raw = self._read(wells, as_blank=False)
         except (ReaderError, NotImplementedError, OSError) as exc:
             self._mark_lost()
+            # Not only the banner: _busy() greyed every action out before the
+            # read, and without this they would stay dead after a failure.
+            self._refresh_state()
             messagebox.showerror(TEXT["title"], TEXT["read_error"].format(error=exc))
             self._say(self._idle_text())
             return
