@@ -256,8 +256,8 @@ class App(ScreenFit, tk.Tk):
 
         self._style()
         self._build()
+        self._fit_to_screen(self._build)
         self._refresh_state()
-        self._shrink_to_content()
 
         if os.environ.get("EPOCH_GUI_TOPMOST") == "1":
             self.attributes("-topmost", True)
@@ -275,6 +275,11 @@ class App(ScreenFit, tk.Tk):
     # ---------------------------------------------------------------- styling
 
     def _build(self) -> None:
+        # Cleared because _fit_to_screen may call this a second time, having
+        # destroyed everything the first pass made.
+        self.blank_buttons = {}
+        self.sample_buttons = {}
+        self.action_buttons = {}
         self._build_banner()
 
         # Packed before the body although it sits below it. The packer hands

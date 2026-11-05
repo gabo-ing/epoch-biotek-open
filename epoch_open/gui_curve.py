@@ -222,8 +222,8 @@ class App(ScreenFit, tk.Tk):
 
         self._style()
         self._build()
+        self._fit_to_screen(self._build)
         self._refresh_state()
-        self._shrink_to_content()
 
         if os.environ.get("EPOCH_GUI_TOPMOST") == "1":
             self.attributes("-topmost", True)
@@ -233,6 +233,11 @@ class App(ScreenFit, tk.Tk):
     # ------------------------------------------------------------- building
 
     def _build(self) -> None:
+        # Cleared because _fit_to_screen may call this a second time, having
+        # destroyed everything the first pass made.
+        self.wells = {}
+        self.role_buttons = {}
+        self.action_buttons = {}
         self._build_banner()
 
         # Before the body, so the packer cannot squeeze it off the window when

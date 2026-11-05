@@ -312,6 +312,50 @@ class ScreenFit:
         y = max(0, min((work_h - height) // 3, work_h - height))
         self.geometry(f"{width}x{height}+{x}+{y}")
 
+    def _step_down_a_tier(self) -> bool:
+        """Move to the next smaller layout, or report that there is none.
+
+        `tiny` and `compact` are chosen from the screen's height before any
+        widget exists, which can only ever be a guess: the same number of
+        pixels holds a different amount of layout depending on the platform's
+        font metrics. Tk on macOS draws this roughly two hundred pixels
+        taller than Tk on Linux at the same nominal point size, so a Retina
+        MacBook -- a large screen by any measure -- got the roomy layout and
+        lost the action buttons off the bottom of the window.
+        """
+        if self.tiny:
+            return False
+        self.tiny = True
+        self.compact = True
+        self.base_pt = 10
+        return True
+
+    def _fit_to_screen(self, rebuild) -> None:
+        """Draw it, and if it does not fit, draw it smaller.
+
+        Called once after the first build with the method that builds the
+        screen. The guess above is checked against the thing it was guessing
+        about, which is the only way to be right on a platform nobody has
+        measured.
+
+        Only ever steps down, and only while nothing has been measured, so
+        there is no reading to lose. A screen that still does not fit at the
+        smallest layout is left alone: the window can be resized, and a
+        further rebuild would only churn.
+        """
+        for _attempt in range(2):
+            self.update_idletasks()
+            _width, work_h = self._work_area()
+            if self.winfo_reqheight() <= work_h - self.px(40):
+                break
+            if not self._step_down_a_tier():
+                break
+            for child in self.winfo_children():
+                child.destroy()
+            self._style()
+            rebuild()
+        self._shrink_to_content()
+
     def _shrink_to_content(self) -> None:
         """Pull the window in to what the layout actually asked for.
 
