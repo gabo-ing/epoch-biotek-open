@@ -181,11 +181,33 @@ No driver is needed: the FTDI driver has been part of macOS since 10.9, and the
 reader is found by its USB serial number rather than by any device path, so
 `/dev/cu.usbserial-*` works without changes.
 
-The interface has been run on macOS and draws correctly: sharp on a Retina
-screen, the layout tightening by itself for the shorter usable height
-(`docs/img/gui-macos.png`). What has **not** been tried is a Mac talking to an
-actual Epoch, and `build_macos.sh` has never been run, so the `.app` route is
-still unverified.
+The interface runs on macOS and draws correctly: sharp on a Retina screen, the
+layout tightening by itself for the shorter usable height
+(`docs/img/gui-macos.png`).
+
+**The build works.** Both apps were built on 5 November 2026 on macOS 26.6
+(arm64) with Homebrew Python 3.15.2, Tk 9.1 and PyInstaller 6.22.3 — the
+newest of everything, which was the combination most likely to break.
+
+What has **not** been tried is a Mac talking to an actual Epoch. One warning
+in the build is worth knowing about before that is attempted:
+
+    WARNING: Ignoring .../IOKit.framework/IOKit imported from
+             serial/tools/list_ports_osx.py
+    WARNING: Ignoring .../CoreFoundation.framework/CoreFoundation
+
+`list_ports_osx.py` is how pyserial enumerates serial ports on macOS, so it
+is exactly how the reader gets found. PyInstaller did not bundle those two
+frameworks. That is almost certainly fine — they are system frameworks at
+absolute paths present on every Mac, loaded by ctypes at runtime — but it is
+the one warning that lands on the one path that matters.
+
+So test it deliberately: with the reader plugged in, if the `.app` shows no
+instrument, run `python3 run_take3.py` from source in the same state. Source
+finding it while the app does not would place the fault in the packaging, and
+those two frameworks are where to look. (The `Cfgmgr32`, `Advapi32` and
+`setupapi` warnings in the same build are pyserial's Windows backend and mean
+nothing here.)
 
 ## Running it today
 

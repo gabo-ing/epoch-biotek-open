@@ -5,6 +5,10 @@
 #
 # PyInstaller cannot cross-compile: a .app has to be built on a Mac.
 #
+# Known to work: macOS 26.6 (arm64), Homebrew Python 3.15.2, Tk 9.1,
+# PyInstaller 6.22.3, on 5 November 2026. Tk 9 was the part expected to fail
+# and did not.
+#
 # Needs Python 3.10 or newer with a working tkinter. Apple's own /usr/bin/python3
 # has shipped with a Tk too old to draw this correctly; python.org's build
 # bundles a current one, and Homebrew's needs `brew install python-tk`.
