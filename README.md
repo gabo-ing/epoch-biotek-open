@@ -150,13 +150,29 @@ Install Python from <https://www.python.org/downloads/> rather than using the
 `python3` that ships with macOS, which has come with a Tk too old to draw this
 correctly. Homebrew's Python does not include Tk at all — it is packaged
 separately as `brew install python-tk@3.13`, and
-without it the program stops with `ModuleNotFoundError: _tkinter`. Then:
+without it the program stops with `ModuleNotFoundError: _tkinter`.
 
-    pip3 install pyserial
+#### Running without building
+
+Homebrew's Python refuses a system-wide `pip install` outright — PEP 668,
+`error: externally-managed-environment` — so install into a virtual
+environment. This is also the fastest way to a working program, since it
+skips PyInstaller entirely:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install pyserial
     python3 run_take3.py
 
-`bash build_macos.sh` produces `dist/EpochTake3.app`. PyInstaller cannot
-cross-compile, so that has to run on a Mac. The result is unsigned, so the first
+The `source` line is needed once per terminal; after that the program starts
+with the last line alone.
+
+#### Building the apps
+
+`bash build_macos.sh` produces `dist/EpochTake3.app` and
+`dist/EpochMultispectral.app`. It makes its own virtual environment
+(`.venv-build`) and installs nothing system-wide. PyInstaller cannot
+cross-compile, so it has to run on a Mac. The result is unsigned, so the first
 launch is refused with "cannot be opened because the developer cannot be
 verified" — right-click the app, choose Open, then Open again, which is
 remembered. Signing it properly needs an Apple Developer ID.
