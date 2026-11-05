@@ -65,6 +65,14 @@ DEFAULT_REFERENCE_NM = 650
 # about the resolution a Gaussian absorption band perhaps 40 nm wide deserves.
 SCAN_NM = (490, 510, 530, 550, 570, 590)
 
+# The most wavelengths one read may ask for, reference included.
+#
+# Gen5's Read Step dialog offers 1 to 6 and stops, photographed on
+# 3 November 2026. The protocol's own count field holds a single digit, so
+# nine would fit, but the software written by the people who built the reader
+# never asks for more than six and neither does this.
+MOST_WAVELENGTHS = 6
+
 # Least-squares needs two points for a line and a third before r-squared says
 # anything at all: with two points it is exactly 1 whatever they are, which
 # would report a perfect curve for no reason. Five or more is normal practice.

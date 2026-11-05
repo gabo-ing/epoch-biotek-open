@@ -34,7 +34,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__, config, curve
-from .curve import CurveError
+from .curve import CurveError, MOST_WAVELENGTHS
 from .reader import EpochReader, MockCurveReader, ReaderError
 from .ui import (ACTION, ACTION_HOVER, ACTION_IDLE, ACTION_IDLE_HOVER,
                  ACTION_IDLE_INK, ACTION_INK, ACTION_OFF, ACTION_OFF_INK,
@@ -80,7 +80,26 @@ TEXT = {
                   "su concentracion, en una muestra para su nombre."),
 
     "settings": "Lectura",
-    "wavelength": "Longitud de onda (nm):",
+    "wavelength": "Longitudes de onda:",
+    "wavelength_change": "Cambiar...",
+    "wl_title": "Longitudes de onda",
+    "wl_help": ("Las mismas opciones que Gen5 ofrece en su Read Step. El "
+                "lector admite hasta {most} por lectura, contando la "
+                "referencia, y las lee todas en una sola pasada."),
+    "wl_count": "Cuantas:",
+    "wl_ref_group": "Referencia",
+    "wl_save": "Aceptar",
+    "wl_cancel": "Cancelar",
+    "wl_primary": ("La primera es la que se usa para la curva de calibrado. "
+                   "Las demas se miden y se guardan, pero una curva describe "
+                   "una sola longitud de onda."),
+    "wl_bad": ("{value} no vale como longitud de onda. El Epoch lee entre "
+               "200 y 999 nm, en numeros enteros."),
+    "wl_repeated": "La longitud de onda {value} esta repetida.",
+    "wl_ref_clash": ("La referencia ({value} nm) es tambien una de las "
+                     "longitudes medidas. Elige otra, o quita la referencia."),
+    "wavelength_hint": ("Hasta {most}, separadas por comas. La primera es la que\n"
+                        "se usa para la curva; las demas se leen y se guardan igual."),
     "use_reference": "Restar referencia",
     "unit": "Unidad:",
     "reference_hint": ("La referencia corrige turbidez y marcas en el fondo "
@@ -134,8 +153,12 @@ TEXT = {
     "saved": "Guardado en {path}. Lote cerrado.",
     "save_error": "No se pudo guardar el archivo:\n\n{error}",
     "read_error": "No se pudo leer:\n\n{error}",
-    "bad_wavelength": ("'{value}' no es una longitud de onda valida. El Epoch "
-                       "lee entre 200 y 999 nm, en numeros enteros."),
+    "bad_wavelength": ("'{value}' no vale. Escribe entre 1 y {most} longitudes "
+                       "de onda separadas por comas, cada una entre 200 y 999 nm.\n"
+                       "Ejemplo: 490, 530, 590"),
+    "too_many_wavelengths": ("Son {count} longitudes de onda y el lector "
+                             "admite {most} por lectura, contando la "
+                             "referencia."),
     "conc_prompt": "Concentracion del patron en {well} ({unit}):",
     "conc_title": "Concentracion del patron",
     "name_prompt": "Nombre de la muestra en {well}:",
@@ -211,7 +234,10 @@ class App(ScreenFit, tk.Tk):
         self.names: dict[str, str] = {}
         self.wells: dict[str, RoundedButton] = {}
 
-        self.blank_value: float | None = None
+        # One blank per wavelength. A blank read at 490 nm says nothing
+        # about 530, and subtracting it there would be inventing a
+        # correction rather than applying one.
+        self.blank_values: dict[int, float] = {}
         self.blank_time: datetime | None = None
         self.fit = None
         self.results: list = []
@@ -324,28 +350,18 @@ class App(ScreenFit, tk.Tk):
         row = ttk.Frame(frame, style="Card.TFrame")
         row.pack(fill="x")
         ttk.Label(row, text=TEXT["wavelength"], style="Card.TLabel").pack(side="left")
-        entry = ttk.Entry(row, textvariable=self.nm, width=6)
-        entry.pack(side="left", padx=6)
-        entry.bind("<FocusOut>", lambda _e: self._refresh_state())
-        entry.bind("<Return>", lambda _e: self._refresh_state())
+        self.wavelength_label = ttk.Label(
+            row, text="", style="Card.TLabel",
+            font=(self.ui_font, self.base_pt, "bold"))
+        self.wavelength_label.pack(side="left", padx=(6, 0))
+        ttk.Button(row, text=TEXT["wavelength_change"],
+                   command=self._choose_wavelengths).pack(side="left", padx=8)
 
-        ttk.Label(row, text=TEXT["unit"], style="Card.TLabel").pack(
-            side="left", padx=(14, 0))
-        ttk.Entry(row, textvariable=self.unit, width=8).pack(side="left", padx=6)
-
-        ref = ttk.Frame(frame, style="Card.TFrame")
-        ref.pack(fill="x", pady=(6, 0))
-        ttk.Checkbutton(ref, text=TEXT["use_reference"],
-                        variable=self.use_reference,
-                        command=self._reference_toggled,
-                        style="Card.TCheckbutton").pack(side="left")
-        self.reference_entry = ttk.Entry(ref, textvariable=self.reference_nm,
-                                         width=6)
-        self.reference_entry.pack(side="left", padx=6)
-
-        if not self.tiny:
-            ttk.Label(frame, text=TEXT["reference_hint"], style="CardMuted.TLabel",
-                      wraplength=self.px(340)).pack(anchor="w", pady=(4, 0))
+        unit_row = ttk.Frame(frame, style="Card.TFrame")
+        unit_row.pack(fill="x", pady=(6, 0))
+        ttk.Label(unit_row, text=TEXT["unit"], style="Card.TLabel").pack(side="left")
+        ttk.Entry(unit_row, textvariable=self.unit, width=8).pack(side="left",
+                                                                  padx=6)
 
         # The one thing in this program that can damage the other one.
         # Wrapped wider and padded less on a short screen: the warning has to
@@ -581,7 +597,7 @@ class App(ScreenFit, tk.Tk):
         self.roles.clear()
         self.concentrations.clear()
         self.names.clear()
-        self.blank_value = None
+        self.blank_values = {}
         self.blank_time = None
         self.fit = None
         self._refresh_state()
@@ -595,26 +611,83 @@ class App(ScreenFit, tk.Tk):
             return None
         return nm if 200 <= nm <= 999 else None
 
-    def _wavelengths(self) -> list[int] | None:
-        """Every wavelength this read needs, or None if the settings are wrong."""
-        nm = self._parse_nm(self.nm.get())
-        if nm is None:
-            return None
-        wanted = [nm]
-        if self.use_reference.get():
-            reference = self._parse_nm(self.reference_nm.get())
-            if reference is None:
+    def _measured(self) -> list[int] | None:
+        """The wavelengths to measure, in the order she wrote them.
+
+        Several, because the instrument takes up to six in one pass and Gen5
+        offers exactly that. The first is the one a curve is built and read
+        against; the rest are measured and recorded beside it, which is the
+        whole point of asking for them.
+        """
+        text = self.nm.get().replace(";", ",").replace(" ", ",")
+        wanted = []
+        for part in (p for p in text.split(",") if p):
+            nm = self._parse_nm(part)
+            if nm is None:
                 return None
-            if reference != nm:
-                wanted.append(reference)
+            if nm not in wanted:
+                wanted.append(nm)
+        return wanted or None
+
+    def _wavelengths(self) -> list[int] | None:
+        """Everything this read asks the instrument for, reference included."""
+        wanted = self._measured()
+        if wanted is None:
+            return None
+        if self.use_reference.get():
+            typed = self._parse_nm(self.reference_nm.get())
+            if typed is None:
+                return None
+            if typed not in wanted:
+                wanted = wanted + [typed]
+        if len(wanted) > MOST_WAVELENGTHS:
+            return None
         return wanted
 
     def _reference_nm(self) -> int | None:
         if not self.use_reference.get():
             return None
         reference = self._parse_nm(self.reference_nm.get())
-        nm = self._parse_nm(self.nm.get())
-        return None if reference == nm else reference
+        return None if reference in (self._measured() or []) else reference
+
+    def _primary(self) -> int | None:
+        """The wavelength a curve is built and read against."""
+        measured = self._measured()
+        return measured[0] if measured else None
+
+    def _blank_at(self, nm: int) -> float:
+        """The blank for one wavelength, or zero where none was read."""
+        return self.blank_values.get(nm, 0.0)
+
+    def _choose_wavelengths(self) -> None:
+        """Open the read settings, and apply them if she accepts.
+
+        Changing what is read invalidates a curve: it was measured at one
+        wavelength with one reference, and both can change here.
+        """
+        dialog = WavelengthsDialog(
+            self, self._measured() or [curve.DEFAULT_NM],
+            self.use_reference.get(),
+            self._parse_nm(self.reference_nm.get()) or curve.DEFAULT_REFERENCE_NM)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+
+        measured, use_reference, reference = dialog.result
+        self.nm.set(", ".join(str(nm) for nm in measured))
+        self.use_reference.set(use_reference)
+        if reference is not None:
+            self.reference_nm.set(str(reference))
+        self._invalidate()
+        self._refresh_state()
+
+    def _summarise_wavelengths(self) -> str:
+        measured = self._measured() or []
+        if not measured:
+            return "-"
+        shown = ", ".join(str(nm) for nm in measured) + " nm"
+        reference = self._reference_nm()
+        return f"{shown}  (ref. {reference})" if reference else shown
 
     def _reference_toggled(self) -> None:
         # The reference is subtracted from the standards as well, so turning it
@@ -632,7 +705,7 @@ class App(ScreenFit, tk.Tk):
 
     def _can_fit(self) -> bool:
         standards = self._wells_for(STANDARD)
-        return (self.blank_value is not None
+        return (bool(self.blank_values)
                 and len(standards) >= curve.MIN_STANDARDS
                 and not self._missing_concentrations())
 
@@ -646,6 +719,7 @@ class App(ScreenFit, tk.Tk):
         self._refresh_curve()
         self._refresh_actions()
         self.next_label.configure(text=self._next_step())
+        self.wavelength_label.configure(text=self._summarise_wavelengths())
 
     def _refresh_roles(self) -> None:
         for role, button in self.role_buttons.items():
@@ -672,7 +746,7 @@ class App(ScreenFit, tk.Tk):
                 fill, ink, outline = BAD_WELL, BAD_WELL_INK, BAD_WELL_LINE
             else:
                 measured = (
-                    (role == BLANK and self.blank_value is not None)
+                    (role == BLANK and bool(self.blank_values))
                     or (role == STANDARD and self.fit is not None)
                     or (role == SAMPLE and any(r.well == name
                                                for r in self.results))
@@ -731,7 +805,7 @@ class App(ScreenFit, tk.Tk):
         # bright one and the order does not have to be remembered.
         nxt = None
         if can_read:
-            if self.blank_value is None:
+            if not self.blank_values:
                 nxt = "read_blank"
             elif not self._curve_ok():
                 nxt = "read_standards"
@@ -779,7 +853,7 @@ class App(ScreenFit, tk.Tk):
                 return TEXT["next_save"]
             return TEXT["next_read_samples"]
 
-        if self.blank_value is None:
+        if not self.blank_values:
             if not self.roles:
                 return TEXT["next_empty_plate"]
             if not self._wells_for(BLANK):
@@ -886,8 +960,19 @@ class App(ScreenFit, tk.Tk):
             return
         wavelengths = self._wavelengths()
         if wavelengths is None:
-            messagebox.showerror(
-                TEXT["title"], TEXT["bad_wavelength"].format(value=self.nm.get()))
+            measured = self._measured() or []
+            if len(measured) > MOST_WAVELENGTHS or (
+                    self.use_reference.get() and
+                    len(measured) >= MOST_WAVELENGTHS):
+                messagebox.showerror(TEXT["title"],
+                                     TEXT["too_many_wavelengths"].format(
+                                         count=len(measured),
+                                         most=MOST_WAVELENGTHS))
+            else:
+                messagebox.showerror(
+                    TEXT["title"],
+                    TEXT["bad_wavelength"].format(value=self.nm.get(),
+                                                  most=MOST_WAVELENGTHS))
             return
 
         self._say(TEXT["reading"])
@@ -898,11 +983,16 @@ class App(ScreenFit, tk.Tk):
             self._failed(exc)
             return
 
-        nm, reference = wavelengths[0], self._reference_nm()
+        reference = self._reference_nm()
         try:
-            self.blank_value = curve.mean(
-                curve.corrected(readings, nm, reference)
-                for readings in raw.values())
+            # A blank per wavelength. The reference, where one is used, is
+            # subtracted inside each -- so the blank for 530 already has 650
+            # taken off it, and a sample at 530 gets the same treatment.
+            self.blank_values = {
+                nm: curve.mean(curve.corrected(readings, nm, reference)
+                               for readings in raw.values())
+                for nm in (self._measured() or [])
+            }
         except CurveError as exc:
             self._failed(exc)
             return
@@ -912,11 +1002,12 @@ class App(ScreenFit, tk.Tk):
         self._invalidate()
         self._refresh_state()
         self._say(TEXT["blank_done"].format(
-            time=self.blank_time.strftime("%H:%M"), abs=self.blank_value))
+            time=self.blank_time.strftime("%H:%M"),
+            abs=self._blank_at(self._primary() or 0)))
 
     def _read_standards(self) -> None:
         wells = self._wells_for(STANDARD)
-        if self.blank_value is None:
+        if not self.blank_values:
             messagebox.showinfo(TEXT["title"], TEXT["no_blank_yet"])
             return
         if len(wells) < curve.MIN_STANDARDS:
@@ -938,14 +1029,18 @@ class App(ScreenFit, tk.Tk):
             self._failed(exc)
             return
 
-        nm, reference = wavelengths[0], self._reference_nm()
+        # The curve is built at the first wavelength only. Reading the
+        # standards at others is fine and their values are kept, but a curve
+        # describes one wavelength: a 530 nm calibration says nothing about
+        # absorbance at 490.
+        nm, reference = self._primary(), self._reference_nm()
         try:
             standards = [
                 curve.Standard(
                     well=well,
                     concentration=self.concentrations[well],
                     absorbance=curve.corrected(raw[well], nm, reference)
-                    - self.blank_value,
+                    - self._blank_at(nm),
                 )
                 for well in wells
             ]
@@ -978,20 +1073,27 @@ class App(ScreenFit, tk.Tk):
             self._failed(exc)
             return
 
-        nm, reference = wavelengths[0], self._reference_nm()
+        measured = self._measured() or []
+        primary, reference = self._primary(), self._reference_nm()
         self.read_number += 1
         try:
+            # One row per well per wavelength. The curve applies to the
+            # primary wavelength alone, so the others come back as
+            # absorbance with no concentration -- which is what they are.
             fresh = [
                 curve.read_against(
-                    well, raw[well], self.fit, wavelength=nm,
+                    well, raw[well],
+                    self.fit if nm == primary else None,
+                    wavelength=nm,
                     reference_nm=reference,
                     # No blank read means nothing is subtracted, rather than
                     # nothing being read.
-                    blank=self.blank_value or 0.0,
+                    blank=self._blank_at(nm),
                     name=self.names.get(well, ""),
                     unit=self.unit.get(),
                 )
                 for well in wells
+                for nm in measured
             ]
         except CurveError as exc:
             messagebox.showerror(TEXT["title"], str(exc))
@@ -1079,7 +1181,10 @@ class App(ScreenFit, tk.Tk):
                     # export_curve from the readings themselves. Naming one
                     # here was how a batch read at 490 and then 530 came out
                     # of the file claiming 530 throughout.
-                    "Absorbancia del blanco": round(self.blank_value or 0.0, 4),
+                    "Absorbancia del blanco": ", ".join(
+                        f"{nm} nm: {value:.4f}"
+                        for nm, value in sorted(self.blank_values.items())
+                    ) or "ninguno",
                     "Lector": ("SIMULADO - no son medidas reales"
                                if self.simulated else
                                getattr(self.backend, "info", None)
@@ -1095,6 +1200,155 @@ class App(ScreenFit, tk.Tk):
         self._refresh_table()
         self._refresh_state()
         self._say(TEXT["saved"].format(path=written))
+
+
+class WavelengthsDialog(tk.Toplevel):
+    """Choose what a read asks the instrument for.
+
+    Laid out the way Gen5's Read Step dialog is -- a count, then that many
+    boxes, then the reference -- because that is the screen this lab already
+    knows for this decision, and because a comma-separated list in a text
+    field is a worse version of the same thing: it has to be parsed, and it
+    cannot show that six is the limit.
+
+    The limit is the instrument's, or near enough: Gen5 offers one to six and
+    stops. See curve.MOST_WAVELENGTHS.
+    """
+
+    def __init__(self, parent, measured, use_reference, reference_nm):
+        super().__init__(parent)
+        self.title(TEXT["wl_title"])
+        self.transient(parent)
+        self.resizable(False, False)
+        self.configure(bg=CANVAS)
+        self.result = None
+        self.px = parent.px
+        self.ui_font = parent.ui_font
+        self.base_pt = parent.base_pt
+
+        body = ttk.Frame(self, padding=16)
+        body.pack(fill="both", expand=True)
+
+        ttk.Label(body, text=TEXT["wl_help"].format(most=MOST_WAVELENGTHS),
+                  wraplength=self.px(430),
+                  style="Muted.TLabel").pack(anchor="w", pady=(0, 12))
+
+        box = ttk.LabelFrame(body, text=TEXT["wl_title"], padding=10,
+                             style="Card.TLabelframe")
+        box.pack(fill="x", pady=(0, 10))
+
+        count_row = ttk.Frame(box, style="Card.TFrame")
+        count_row.pack(fill="x", pady=(0, 8))
+        ttk.Label(count_row, text=TEXT["wl_count"],
+                  style="Card.TLabel").pack(side="left")
+        self.count = tk.IntVar(value=max(1, min(len(measured),
+                                                MOST_WAVELENGTHS)))
+        for n in range(1, MOST_WAVELENGTHS + 1):
+            ttk.Radiobutton(count_row, text=str(n), value=n,
+                            variable=self.count, command=self._count_changed,
+                            style="Card.TRadiobutton").pack(side="left",
+                                                            padx=(8, 0))
+
+        fields = ttk.Frame(box, style="Card.TFrame")
+        fields.pack(fill="x")
+        self.boxes = []
+        self.values = []
+        for index in range(MOST_WAVELENGTHS):
+            cell = ttk.Frame(fields, style="Card.TFrame")
+            cell.grid(row=0, column=index, padx=(0, 6))
+            ttk.Label(cell, text=str(index + 1), style="CardMuted.TLabel").pack()
+            value = tk.StringVar(
+                value=str(measured[index]) if index < len(measured) else "")
+            entry = ttk.Entry(cell, textvariable=value, width=6,
+                              justify="center")
+            entry.pack()
+            self.values.append(value)
+            self.boxes.append(entry)
+
+        ttk.Label(box, text=TEXT["wl_primary"], wraplength=self.px(420),
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(8, 0))
+
+        reference = ttk.LabelFrame(body, text=TEXT["wl_ref_group"],
+                                   padding=10, style="Card.TLabelframe")
+        reference.pack(fill="x", pady=(0, 12))
+        row = ttk.Frame(reference, style="Card.TFrame")
+        row.pack(fill="x")
+        self.use_reference = tk.BooleanVar(value=use_reference)
+        ttk.Checkbutton(row, text=TEXT["use_reference"],
+                        variable=self.use_reference,
+                        style="Card.TCheckbutton").pack(side="left")
+        self.reference = tk.StringVar(value=str(reference_nm))
+        ttk.Entry(row, textvariable=self.reference, width=6).pack(side="left",
+                                                                  padx=6)
+        ttk.Label(reference, text=TEXT["reference_hint"],
+                  wraplength=self.px(420),
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
+
+        buttons = ttk.Frame(body)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text=TEXT["wl_cancel"],
+                   command=self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(buttons, text=TEXT["wl_save"],
+                   command=self._save).pack(side="right")
+
+        self._count_changed()
+        self.bind("<Return>", lambda _e: self._save())
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.grab_set()
+
+    def _count_changed(self) -> None:
+        """Only the boxes in use are editable, as in Gen5's own dialog."""
+        wanted = self.count.get()
+        for index, entry in enumerate(self.boxes):
+            entry.configure(state="normal" if index < wanted else "disabled")
+
+    def _save(self) -> None:
+        measured = []
+        for index in range(self.count.get()):
+            raw = self.values[index].get().strip()
+            try:
+                nm = int(raw)
+            except ValueError:
+                nm = -1
+            if not 200 <= nm <= 999:
+                messagebox.showerror(TEXT["wl_title"],
+                                     TEXT["wl_bad"].format(value=raw or "''"),
+                                     parent=self)
+                return
+            if nm in measured:
+                messagebox.showerror(TEXT["wl_title"],
+                                     TEXT["wl_repeated"].format(value=nm),
+                                     parent=self)
+                return
+            measured.append(nm)
+
+        reference = None
+        if self.use_reference.get():
+            raw = self.reference.get().strip()
+            try:
+                reference = int(raw)
+            except ValueError:
+                reference = -1
+            if not 200 <= reference <= 999:
+                messagebox.showerror(TEXT["wl_title"],
+                                     TEXT["wl_bad"].format(value=raw or "''"),
+                                     parent=self)
+                return
+            if reference in measured:
+                messagebox.showerror(
+                    TEXT["wl_title"],
+                    TEXT["wl_ref_clash"].format(value=reference), parent=self)
+                return
+            if len(measured) + 1 > MOST_WAVELENGTHS:
+                messagebox.showerror(
+                    TEXT["wl_title"],
+                    TEXT["too_many_wavelengths"].format(
+                        count=len(measured) + 1, most=MOST_WAVELENGTHS),
+                    parent=self)
+                return
+
+        self.result = (measured, self.use_reference.get(), reference)
+        self.destroy()
 
 
 def connect_backend(force_simulator: bool = False):

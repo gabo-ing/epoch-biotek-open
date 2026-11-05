@@ -130,6 +130,30 @@ because a Curva sheet describing nothing is worse than no Curva sheet.
 
 Adding standards upgrades the answer rather than unlocking it.
 
+## Up to six wavelengths in one read
+
+**Longitudes de onda → Cambiar…** opens a dialog shaped like Gen5's Read
+Step: a count from one to six, that many boxes, then the reference. The
+instrument takes them all in a single pass, which is how the reference read
+and the peak scan already worked — what was missing was a way to ask for
+them.
+
+Six is the limit, counting the reference. Gen5's own dialog offers one to six
+and stops; see `curve.MOST_WAVELENGTHS`.
+
+**The first wavelength is the one the curve belongs to.** A calibration
+measured at 530 nm says nothing about absorbance at 490, so the other
+wavelengths come back as absorbance with no concentration — the same rule as
+a read with no curve at all, for the same reason.
+
+**The blank is kept per wavelength.** A blank read at 490 nm says nothing
+about 530, and subtracting it there would be inventing a correction rather
+than applying one. A wavelength that was never blanked subtracts nothing.
+
+One press then produces a row per well per wavelength, each carrying the
+wavelength it was measured at and the read it came from. Reading one
+wavelength behaves exactly as before.
+
 ## The four steps
 
 Marked wells take a role — blank, standard or sample — chosen with the three

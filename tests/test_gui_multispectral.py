@@ -274,7 +274,7 @@ class TestTheCurveIsThrownAwayWhenItStopsApplying:
             app._clear()
             assert app.roles == {}
             assert app.concentrations == {}
-            assert app.blank_value is None
+            assert app.blank_values == {}
             assert app.fit is None
         finally:
             app.destroy()
@@ -426,7 +426,7 @@ class TestWhatTheScreenSays:
             return
         try:
             _loaded(app)
-            app.blank_value = 0.0
+            app.blank_values = {}
             # Four standards on a line and one well off it, which is what a
             # standard diluted wrong actually looks like.
             app.fit = curve.fit_standards([
@@ -714,11 +714,12 @@ class TestAPlainReadNeedsNothing:
             app.results.clear()
             _mark(app, gui_curve.BLANK, ["A2", "B2"])
             app._read_blank()
-            assert app.blank_value is not None
+            assert app.blank_values
             app._read_samples()
             corrected = app.results[-1].absorbance
 
-            assert abs(raw - corrected - app.blank_value) < 0.02, (
+            blank = app._blank_at(app._primary())
+            assert abs(raw - corrected - blank) < 0.02, (
                 "the blank was not subtracted once it existed")
         finally:
             app.destroy()
@@ -734,5 +735,137 @@ class TestAPlainReadNeedsNothing:
             app._read_standards()
             app._read_samples()
             assert app.results[-1].concentration is not None
+        finally:
+            app.destroy()
+
+
+class TestSeveralWavelengthsInOneRead:
+    """Up to six wavelengths per read, as Gen5's Read Step offers.
+
+    The instrument takes them in a single pass, which is how the reference
+    read and the peak scan already worked; what was missing was a way to ask.
+    Asked for on 5 November 2026, after comparing coffee at 490 and 530 by
+    doing two separate reads.
+
+    The curve belongs to the first wavelength alone. A calibration measured
+    at 530 nm says nothing about absorbance at 490, so the others come back
+    as absorbance with no concentration -- the same rule as a read with no
+    curve at all.
+    """
+
+    def _choose(self, app, measured, reference=None):
+        """Apply a dialog result without opening the dialog."""
+        app.nm.set(", ".join(str(nm) for nm in measured))
+        app.use_reference.set(reference is not None)
+        if reference is not None:
+            app.reference_nm.set(str(reference))
+        app._invalidate()
+        app._refresh_state()
+
+    def test_it_asks_the_instrument_for_all_of_them_at_once(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [490, 530, 590], reference=650)
+            assert app._measured() == [490, 530, 590]
+            assert app._wavelengths() == [490, 530, 590, 650]
+            assert app._primary() == 490
+        finally:
+            app.destroy()
+
+    def test_one_press_gives_a_row_per_wavelength(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [490, 530, 590])
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            app._read_samples()
+            assert [r.wavelength for r in app.results] == [490, 530, 590]
+            assert {r.read_number for r in app.results} == {1}, (
+                "all three came from one read and must say so")
+        finally:
+            app.destroy()
+
+    def test_the_blank_is_kept_per_wavelength(self):
+        """A blank at 490 says nothing about 530."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [490, 530])
+            _mark(app, gui_curve.BLANK, ["A2", "B2"])
+            app._read_blank()
+            assert sorted(app.blank_values) == [490, 530]
+            assert app._blank_at(490) != app._blank_at(530)
+            assert app._blank_at(999) == 0.0, (
+                "a wavelength never blanked must subtract nothing, not guess")
+        finally:
+            app.destroy()
+
+    def test_only_the_first_wavelength_gets_a_concentration(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [530, 490])
+            _mark(app, gui_curve.BLANK, ["A2", "B2"])
+            app._read_blank()
+            series = {"A3": 0, "B3": 5, "C3": 10, "D3": 20}
+            _mark(app, gui_curve.STANDARD, list(series))
+            app.concentrations.update(series)
+            app._refresh_state()
+            app._read_standards()
+            assert app.fit is not None and app.fit.usable
+
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            app._read_samples()
+
+            by_nm = {r.wavelength: r for r in app.results}
+            assert by_nm[530].concentration is not None, (
+                "the curve's own wavelength must quantify")
+            assert by_nm[490].concentration is None, (
+                "a 530 nm curve cannot report a concentration at 490 nm")
+        finally:
+            app.destroy()
+
+    def test_six_is_the_limit_counting_the_reference(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [400, 450, 500, 550, 600, 650])
+            assert app._wavelengths() is not None, "six measured is allowed"
+
+            self._choose(app, [400, 450, 500, 550, 600, 650], reference=700)
+            assert app._wavelengths() is None, (
+                "seven with the reference must be refused")
+        finally:
+            app.destroy()
+
+    def test_a_repeated_wavelength_is_collapsed(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [530, 530, 490])
+            assert app._measured() == [530, 490]
+        finally:
+            app.destroy()
+
+    def test_one_wavelength_still_behaves_as_before(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._choose(app, [530])
+            _mark(app, gui_curve.SAMPLE, ["A1"])
+            app._refresh_state()
+            app._read_samples()
+            assert len(app.results) == 1
+            assert app.results[0].wavelength == 530
         finally:
             app.destroy()
