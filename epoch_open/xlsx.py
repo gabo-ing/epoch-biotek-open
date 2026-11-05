@@ -315,10 +315,10 @@ def export_results(path, results, sample_names=None, metadata: dict | None = Non
 # it.
 
 CURVE_SUMMARY_HEADERS = [
-    "Muestra", "Pozo", "Absorbancia", "Concentracion", "Unidad",
-    "En rango", "Aviso",
+    "Lectura", "Muestra", "Pozo", "nm", "Ref. nm", "Absorbancia",
+    "Concentracion", "Unidad", "En rango", "Aviso",
 ]
-CURVE_SUMMARY_WIDTHS = [26, 8, 13, 14, 10, 10, 52]
+CURVE_SUMMARY_WIDTHS = [8, 24, 7, 7, 9, 13, 14, 10, 10, 46]
 
 CURVE_FIT_HEADERS = ["Pozo", "Concentracion patron", "Absorbancia", "Residual"]
 CURVE_FIT_WIDTHS = [10, 22, 13, 12]
@@ -335,8 +335,11 @@ def curve_to_summary(results, unit: str) -> list[list]:
     for result in results:
         quantified = result.concentration is not None
         rows.append([
+            result.read_number or "",
             result.name or result.well,
             result.well,
+            result.wavelength,
+            result.reference_nm if result.reference_nm else "",
             round(result.absorbance, 4),
             round(result.concentration, 3) if quantified else "",
             unit if quantified else "",
@@ -378,19 +381,33 @@ def curve_to_fit_sheet(fit) -> list[list]:
     return rows
 
 
+def wavelengths_used(results, fallback=()) -> list[int]:
+    """Every wavelength any reading in the batch was taken at.
+
+    A batch is not one read. Taking the last read's settings as the batch's
+    is what made the old workbook claim 530 nm over rows measured at 490.
+    """
+    seen = set()
+    for result in results:
+        seen.update(result.raw)
+    return sorted(seen) or sorted(fallback)
+
+
 def curve_to_detail(results, fit, wavelengths) -> list[list]:
     """Every well that was read, raw, with nothing subtracted.
 
     Including the standards, so the whole plate can be reconstructed from this
     sheet alone without trusting any of the arithmetic above it.
     """
-    wavelengths = list(wavelengths)
-    rows = [["Pozo", "Rol"] + [f"{nm} nm" for nm in wavelengths]]
+    # Every wavelength anything in this batch was read at, not just the
+    # last read's.
+    wavelengths = wavelengths_used(results, wavelengths)
+    rows = [["Lectura", "Pozo", "Rol"] + [f"{nm} nm" for nm in wavelengths]]
     for standard in (fit.standards if fit is not None else ()):
-        rows.append([standard.well, "patron"] + [""] * len(wavelengths))
+        rows.append(["", standard.well, "patron"] + [""] * len(wavelengths))
     for result in results:
         rows.append(
-            [result.well, "muestra"]
+            [result.read_number or "", result.well, "muestra"]
             + [round(result.raw.get(nm), 4) if nm in result.raw else ""
                for nm in wavelengths]
         )
@@ -414,6 +431,14 @@ def export_curve(path, results, fit, wavelengths, metadata: dict | None = None,
         summary.append(["Patrones", fit.n])
     else:
         summary.append(["Curva", "ninguna: lectura directa en absorbancia"])
+
+    # Named here as a summary of the batch, never as a setting that applies
+    # to every row: the per-row columns are what say how each was measured.
+    used = wavelengths_used(results, wavelengths)
+    summary.append([
+        "Longitudes de onda leidas",
+        ", ".join(f"{nm} nm" for nm in used) if used else "-",
+    ])
     for key, value in (metadata or {}).items():
         summary.append([key, value])
 

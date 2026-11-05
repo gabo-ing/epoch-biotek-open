@@ -276,6 +276,14 @@ class CurveResult:
     absorbance: float
     concentration: float | None
     unit: str
+    # How this reading was taken. A batch can hold reads at different
+    # wavelengths -- the same plate at 490 and then at 530 -- and without
+    # these a row is indistinguishable from the same well read differently.
+    # The workbook used to name only the last wavelength in its footer, which
+    # did not merely omit the others: it said the wrong one about most rows.
+    wavelength: int = DEFAULT_NM
+    reference_nm: int | None = None
+    read_number: int = 0
     raw: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)
 
@@ -406,6 +414,7 @@ def read_against(
         return CurveResult(
             well=well, name=name, absorbance=absorbance,
             concentration=None, unit=unit,
+            wavelength=wavelength, reference_nm=reference_nm,
             raw=dict(readings), notes=notes,
         )
 
@@ -422,6 +431,7 @@ def read_against(
     return CurveResult(
         well=well, name=name, absorbance=absorbance,
         concentration=concentration, unit=fit.unit,
+        wavelength=wavelength, reference_nm=reference_nm,
         raw=dict(readings), notes=notes,
     )
 

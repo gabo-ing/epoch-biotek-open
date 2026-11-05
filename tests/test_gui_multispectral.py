@@ -674,7 +674,13 @@ class TestAPlainReadNeedsNothing:
             app._read_samples()
             row = app.table.get_children()[-1]
             values = app.table.item(row, "values")
-            assert values[3] == "-", f"concentration cell was {values[3]!r}"
+            # Found by name, not position: the columns changed once already
+            # when the wavelength column was added, and a test that counts
+            # from the left fails for a reason that has nothing to do with
+            # what it is checking.
+            column = gui_curve.TEXT["columns"].index("Conc.")
+            assert values[column] == "-", (
+                f"concentration cell was {values[column]!r}")
         finally:
             app.destroy()
 

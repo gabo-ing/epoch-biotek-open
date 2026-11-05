@@ -18,7 +18,8 @@ from xml.etree import ElementTree
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from epoch_open import curve                     # noqa: E402
-from epoch_open.xlsx import export_curve         # noqa: E402
+from epoch_open.xlsx import (curve_to_detail, curve_to_summary,  # noqa: E402
+                             export_curve)
 
 STANDARDS = [
     curve.Standard("A2", 0, 0.000),
@@ -105,3 +106,66 @@ class TestCurveWorkbook:
         text = _text(path)
         assert "530 nm" in text
         assert "650 nm" in text
+
+
+class TestABatchReadAtTwoWavelengths:
+    """The same plate at 490 nm and then at 530 nm, in one batch.
+
+    Gabo did this on 5 November 2026 to compare his coffee at two
+    wavelengths, and the workbook could not express it. Sixteen rows came
+    out, eight measured at each, with nothing on any row saying which --
+    and a footer reading "Longitud de onda: 530 nm", taken from the last
+    read and therefore wrong about half the file.
+
+    That is worse than an omission. A reader had no way to know the rows
+    differed, and every indication that they did not.
+    """
+
+    def _batch(self):
+        fit = curve.fit_standards(STANDARDS)
+        return [
+            curve.read_against("A1", {490: 0.384}, None, wavelength=490),
+            curve.read_against("A1", {530: 0.294}, None, wavelength=530),
+            curve.read_against("B1", {530: 0.276}, fit, wavelength=530),
+        ]
+
+    def test_each_row_carries_the_wavelength_it_was_read_at(self):
+        results = self._batch()
+        assert [r.wavelength for r in results] == [490, 530, 530]
+
+    def test_the_summary_distinguishes_the_two_reads_of_one_well(self):
+        results = self._batch()
+        results[0].read_number, results[1].read_number = 1, 2
+        rows = curve_to_summary(results, "ug/mL")
+        header = rows[0]
+        nm = header.index("nm")
+        well = header.index("Pozo")
+        a1_rows = [r for r in rows[1:] if r[well] == "A1"]
+        assert len(a1_rows) == 2
+        assert {r[nm] for r in a1_rows} == {490, 530}, (
+            "both readings of A1 look identical in the summary")
+
+    def test_the_footer_lists_every_wavelength_not_the_last(self):
+        path = _out_dir() / "two-wavelengths.xlsx"
+        if path.exists():
+            path.unlink()
+        results = self._batch()
+        export_curve(path, results, None, [530], unit="ug/mL")
+        text = _text(path)
+        assert "490" in text and "530" in text
+        assert "Longitudes de onda leidas" in text, (
+            "the footer must summarise the batch, not name one read's setting")
+
+    def test_the_detail_sheet_has_a_column_for_each_wavelength(self):
+        rows = curve_to_detail(self._batch(), None, [530])
+        header = rows[0]
+        assert "490 nm" in header and "530 nm" in header, (
+            f"detail header was {header}")
+
+    def test_a_single_wavelength_batch_is_unchanged(self):
+        """The common case must not have grown noise."""
+        results = [curve.read_against("A1", {530: 0.3}, None, wavelength=530)]
+        rows = curve_to_summary(results, "ug/mL")
+        assert rows[1][rows[0].index("nm")] == 530
+        assert rows[1][rows[0].index("Ref. nm")] == "", (
+            "no reference was used, so that cell stays empty")

@@ -105,7 +105,10 @@ TEXT = {
     "curve_unusable": "NO UTILIZABLE",
     "curve_unread": "SIN LEER",
 
-    "columns": ("Muestra", "Pozo", "Abs.", "Conc.", "Aviso"),
+    # "Lectura:Pozo" rather than the well alone, as epoch-take3 does: a batch
+    # can hold the same well read twice, and two rows reading A1 with nothing
+    # to tell them apart is the screen's version of the bug the workbook had.
+    "columns": ("Muestra", "Lectura:Pozo", "nm", "Abs.", "Conc.", "Aviso"),
 
     "reading": "Leyendo... no abras la tapa.",
     "blank_done": "Blanco leido a las {time}: {abs:.4f} de absorbancia media.",
@@ -483,8 +486,8 @@ class App(ScreenFit, tk.Tk):
 
         self.table = ttk.Treeview(frame, columns=TEXT["columns"],
                                   show="headings", height=8)
-        numeric = {"Abs.", "Conc."}
-        widths = [self.px(w) for w in (150, 60, 80, 90, 240)]
+        numeric = {"Abs.", "Conc.", "nm"}
+        widths = [self.px(w) for w in (130, 85, 50, 75, 85, 200)]
         for column, width in zip(TEXT["columns"], widths):
             anchor = "e" if column in numeric else "w"
             self.table.heading(column, text=column, anchor=anchor)
@@ -969,6 +972,8 @@ class App(ScreenFit, tk.Tk):
             messagebox.showerror(TEXT["title"], str(exc))
             return
 
+        for result in fresh:
+            result.read_number = self.read_number
         self.results.extend(fresh)
         self._refresh_state()
         self._refresh_table()
@@ -1016,7 +1021,9 @@ class App(ScreenFit, tk.Tk):
             tag = "warn" if result.notes else ("odd" if index % 2 else "even")
             self.table.insert("", "end", tags=(tag,), values=(
                 result.name or result.well,
-                result.well,
+                f"{result.read_number}:{result.well}" if result.read_number
+                else result.well,
+                result.wavelength,
                 f"{result.absorbance:.4f}".replace(".", ","),
                 ("-" if result.concentration is None
                  else f"{result.concentration:.2f}".replace(".", ",")),
@@ -1042,9 +1049,10 @@ class App(ScreenFit, tk.Tk):
                 path, self.results, self.fit, wavelengths,
                 unit=self.unit.get(),
                 metadata={
-                    "Longitud de onda": f"{wavelengths[0]} nm",
-                    "Referencia": (f"{self._reference_nm()} nm"
-                                   if self._reference_nm() else "no"),
+                    # The wavelengths are per row, and summarised by
+                    # export_curve from the readings themselves. Naming one
+                    # here was how a batch read at 490 and then 530 came out
+                    # of the file claiming 530 throughout.
                     "Absorbancia del blanco": round(self.blank_value or 0.0, 4),
                     "Lector": ("SIMULADO - no son medidas reales"
                                if self.simulated else
