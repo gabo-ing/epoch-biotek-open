@@ -255,9 +255,11 @@ class App(ScreenFit, tk.Tk):
         self.read_number = 0
 
         self._style()
-        self._build()
-        self._fit_to_screen(self._build)
-        self._refresh_state()
+        self._draw()
+        # Checked against the screen only once the state is on it: a warning
+        # or a status line can widen the layout after it is built, and the
+        # fit has to judge what she will actually see.
+        self._fit_to_screen(self._draw)
 
         if os.environ.get("EPOCH_GUI_TOPMOST") == "1":
             self.attributes("-topmost", True)
@@ -273,6 +275,16 @@ class App(ScreenFit, tk.Tk):
             self.after(self.PROBE_MS, self._probe_tick)
 
     # ---------------------------------------------------------------- styling
+
+    def _draw(self) -> None:
+        """Build the screen and put the current state on it.
+
+        One call, because _fit_to_screen may run it again after stepping
+        down a tier, and a rebuilt screen with no state on it would show
+        a blank plate and empty fields.
+        """
+        self._build()
+        self._refresh_state()
 
     def _build(self) -> None:
         # Cleared because _fit_to_screen may call this a second time, having

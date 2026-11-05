@@ -189,25 +189,24 @@ layout tightening by itself for the shorter usable height
 (arm64) with Homebrew Python 3.15.2, Tk 9.1 and PyInstaller 6.22.3 — the
 newest of everything, which was the combination most likely to break.
 
-What has **not** been tried is a Mac talking to an actual Epoch. One warning
-in the build is worth knowing about before that is attempted:
+**A Mac has talked to the instrument**, on 5 November 2026: badge green,
+reader found at `/dev/cu.usbserial-254717`, and a plate read. The port name
+carries the instrument's own serial number, which is how it is found — see
+`docs/FINDINGS.md`.
+
+That also settled a warning the build prints, which had looked worth
+worrying about:
 
     WARNING: Ignoring .../IOKit.framework/IOKit imported from
              serial/tools/list_ports_osx.py
     WARNING: Ignoring .../CoreFoundation.framework/CoreFoundation
 
 `list_ports_osx.py` is how pyserial enumerates serial ports on macOS, so it
-is exactly how the reader gets found. PyInstaller did not bundle those two
-frameworks. That is almost certainly fine — they are system frameworks at
-absolute paths present on every Mac, loaded by ctypes at runtime — but it is
-the one warning that lands on the one path that matters.
-
-So test it deliberately: with the reader plugged in, if the `.app` shows no
-instrument, run `python3 run_take3.py` from source in the same state. Source
-finding it while the app does not would place the fault in the packaging, and
-those two frameworks are where to look. (The `Cfgmgr32`, `Advapi32` and
-`setupapi` warnings in the same build are pyserial's Windows backend and mean
-nothing here.)
+is exactly how the reader gets found, and PyInstaller did not bundle those
+two frameworks. **It is harmless**: they are system frameworks at absolute
+paths present on every Mac, loaded by ctypes at runtime, and the reader was
+found without them. (The `Cfgmgr32`, `Advapi32` and `setupapi` warnings in
+the same build are pyserial's Windows backend and mean nothing here.)
 
 ## Running it today
 
