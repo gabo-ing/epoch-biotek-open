@@ -250,6 +250,7 @@ reading is disabled again, rather than quietly reverting to simulated numbers.
 
     epoch_open/xlsx.py     both workbooks, no dependencies
     tests/                 test suite and a dependency-free runner
+    docs/STATUS.md         where the project stands: what is proven, what is open
     docs/MULTISPECTRAL.md  how the curve program works and what it refuses
     docs/CAPTURE.md        how to capture the protocol from the running Gen5
     docs/FINDINGS.md       what the original instrument disks established
