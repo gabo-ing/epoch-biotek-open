@@ -1,3 +1,17 @@
+# The PyLabRobot thread
+
+**Posted.** This went up on 26 October 2026 in
+<https://discuss.pylabrobot.org/t/biotek-epoch-original-fw-1-12-reader-stuck-at-boot-read-commands/622>,
+opened by David (`dbon`) on 17 October. He replied on 30 October: *"this is exactly the
+missing piece"* — the capability-2064 field explained his `2D06` refusal, and he intends
+to build an Epoch backend for PyLabRobot on top of `docs/PROTOCOL.md` once his reader is
+repaired. The filename still says "draft" for historical reasons; the text below is what
+was posted.
+
+He left two questions, answered in the follow-up at the end of this file.
+
+## Reply 1 — posted 26 October 2026
+
 Hi David,
 
 Same instrument here: original Epoch, P/N 7200201, firmware 1.12. I spent yesterday
@@ -78,3 +92,50 @@ something I haven't recorded, tell me what to send and I'll run it and post the 
 Cheap for me, and you can't do it right now.
 
 Hope you get it back on its feet. Those wine assays sound more fun than my aphid DNA.
+
+## Reply 2 — draft, answering David's two questions of 30 October 2026
+
+Hi David,
+
+Glad it helped. Both answers come with a caveat up front: my reader has gone back to its
+lab, so I can't run anything new right now. Everything below is from notes and captures
+taken while it was on my desk, not from a fresh test.
+
+**Does it send anything at power-up?** No. My notes from the protocol work say it
+plainly: the reader is silent until spoken to — nothing on power-up, nothing on opening
+the port. It only ever answered after I sent a command character. So your reader being
+quiet at boot is not in itself a sign of damage; mine was quiet too, and it was healthy.
+That also means silence can't distinguish a working reader from one sulking in
+diagnostic mode, which I realise is the opposite of the news you wanted.
+
+For what it's worth, I did power-cycle mine once, in a mild panic, after it stopped
+responding mid-session. It came back completely normal — no config loss, no diagnostic
+mode, nothing. So a power cycle on its own doesn't seem to be what puts one into the
+state yours is in.
+
+**On the baud rate.** I've seen two rates, on two days:
+
+- 22 October — 9600, 8-N-2, RTS/CTS, first attempt, straight from a cold start.
+- 26 October — 38400, after Gen5 had been driving it from the other machine.
+
+So: more than once, yes, but I only ever caught it in the act twice, and the one thing
+the two days had in common is that Gen5 had touched it before the second. My guess —
+and it is a guess, I never tested it deliberately — is that Gen5 renegotiates the rate
+upward and the reader stays there until something sets it back.
+
+What I did about it is probably the useful part for a backend: rather than pick a rate,
+I walk them. `EpochReader` tries 9600, 38400, 19200, 57600, 115200, 38461 in that order
+and keeps the first that gives a clean handshake. It costs a couple of seconds on
+connect and it has not failed since. I'd suggest the same for a PyLabRobot backend,
+because a hardcoded 9600 will work for months and then mysteriously not, on a reader
+someone else plugged Gen5 into.
+
+One correction to my own docs while I'm here: `PROTOCOL.md` still says "stay at 9600",
+which was true of the first day and wrong as a general rule. The 38461 fallback does
+return noise on this reader, but 38400 is real.
+
+Good luck with the repair — and if you do get an Epoch backend working, say so here. I
+know of at least one other lab in the same position: instrument fine, activations gone.
+
+Best,
+Gabo

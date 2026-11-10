@@ -13,8 +13,20 @@ settings and the responses below are what this reader actually did.
 | Framing | 8 data bits, no parity, **2 stop bits** |
 | Flow control | RTS/CTS, RTS asserted |
 
-PyLabRobot falls back to 38461 baud when 9600 times out. **This reader does not need
-that** — at 38461 it returns noise (`b'x<\x0f\x80'`). Stay at 9600.
+PyLabRobot falls back to 38461 baud when 9600 times out. At 38461 this reader returns
+noise (`b'x<\x0f\x80'`), so that particular fallback is not the answer.
+
+**But do not hardcode 9600.** An earlier version of this page said "stay at 9600", and
+that was true of one day rather than of the instrument. The rate moves: 9600 on
+22 October 2026 from a cold start, 38400 on 26 October after Gen5 had been driving the
+reader from another machine. The likeliest explanation is that Gen5 negotiates the rate
+upward and the reader stays there, though that was never tested deliberately.
+
+`EpochReader` therefore walks 9600, 38400, 19200, 57600, 115200, 38461 and keeps the
+first that handshakes cleanly. It costs a couple of seconds on connect and has not
+failed since. Anyone writing another backend should do the same — a hardcoded 9600
+works for months and then mysteriously does not, on a reader someone has since plugged
+Gen5 into.
 
 The reader is silent until spoken to: nothing is emitted on power-up or on connect.
 
