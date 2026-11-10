@@ -104,6 +104,46 @@ Two honest wrinkles, both small and both still open:
   (A9, H9) and cuvette (E10, E11) positions, the 4-parameter logistic fit ELISA wants,
   and Gen5's extrapolation factor.
 - Cosmetic: the "Leer tambien 230 nm" checkbox is oversized on macOS.
+- **A blank read with no plate in the carrier reports nonsense, confidently.** See
+  below.
+
+## The empty-carrier blank
+
+On 9 November 2026, during the install on the new lab computer, a blank was read with
+**no plate in the instrument at all**, on A2, A3, B2, B3, C2, C3. One well came back
+divergent. The instrument went back before any readings could be kept, so what follows
+is a reproduction, not a diagnosis of that run.
+
+Feeding air-like readings through `blank_report()` reproduces it from the arithmetic
+alone:
+
+| blank | CV% at 260 | verdict |
+|---|---|---|
+| air, 0 ± 0.0005 AU | 397% | failed |
+| air, five at 0.0000 and one at 0.0003 | 245% | failed, **one well named** |
+| air offset ~0.005 ± 0.0005 AU | 5.8% | passes |
+| real water blank, ~0.050 AU | 2.1% | passes |
+
+The cause is that **CV% is SD divided by the mean**, and with no plate the mean is
+about zero. A difference of 0.0003 AU — a third of the instrument's own repeatability,
+and utterly meaningless — becomes a CV of 245% and names a well. `blank_cv_percent()`
+guards only `abs(mean) < 1e-9`, which a near-zero mean sails straight past.
+
+So: **an empty-carrier blank is evidence of neither a fault nor of health.** The gate
+is a relative measure and there is nothing for it to be relative to. A real water blank
+on the Take3 reads about 0.045–0.058 AU raw at 260 nm and passes with CV around 2%, so
+the two cases separate cleanly — which is also why a guard is possible.
+
+**The guard is not built**, deliberately. Refusing to judge a blank whose mean sits
+below, say, 0.01 AU and saying "parece que no hay placa en el lector" instead would be
+a few lines. But the threshold should be set from one real empty-carrier reading, and
+we have none: the numbers above are invented to probe the arithmetic, and inventing a
+limit from invented data is how the old blanking rules went wrong. Take one empty read
+the next time an Epoch is available, then set it.
+
+This matters more than it looks, because reading a blank with nothing loaded is exactly
+what someone does when they install this from GitHub and want to see the thing move.
+The first impression should not be a red well.
 
 ## Running the tests
 
