@@ -111,8 +111,10 @@ Two honest wrinkles, both small and both still open:
 
 On 9 November 2026, during the install on the new lab computer, a blank was read with
 **no plate in the instrument at all**, on A2, A3, B2, B3, C2, C3. One well came back
-divergent. The instrument went back before any readings could be kept, so what follows
-is a reproduction, not a diagnosis of that run.
+divergent, the blanking was refused, and deselecting that one well re-enabled reading
+samples. The instrument went back before any readings could be kept, so the numbers
+below are a reproduction rather than that run's own data — but the behaviour they
+produce matches what was seen, step for step.
 
 Feeding air-like readings through `blank_report()` reproduces it from the arithmetic
 alone:
@@ -128,6 +130,13 @@ The cause is that **CV% is SD divided by the mean**, and with no plate the mean 
 about zero. A difference of 0.0003 AU — a third of the instrument's own repeatability,
 and utterly meaningless — becomes a CV of 245% and names a well. `blank_cv_percent()`
 guards only `abs(mean) < 1e-9`, which a near-zero mean sails straight past.
+
+The rest of the behaviour matches too. With all six wells in, the blanking is refused
+and C3 is named; take C3 out and the remaining five pass at CV 0%; take out an innocent
+well instead and it still fails and still points at C3. So `wells_to_discard` did its
+job exactly right — it named the one well whose removal fixes the blanking, and would
+not be talked into blaming another. The machinery is sound; it was handed an input that
+means nothing.
 
 So: **an empty-carrier blank is evidence of neither a fault nor of health.** The gate
 is a relative measure and there is nothing for it to be relative to. A real water blank
