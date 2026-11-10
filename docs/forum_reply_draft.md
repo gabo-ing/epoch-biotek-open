@@ -118,10 +118,13 @@ state yours is in.
 - 22 October — 9600, 8-N-2, RTS/CTS, first attempt, straight from a cold start.
 - 26 October — 38400, after Gen5 had been driving it from the other machine.
 
-So: more than once, yes, but I only ever caught it in the act twice, and the one thing
-the two days had in common is that Gen5 had touched it before the second. My guess —
-and it is a guess, I never tested it deliberately — is that Gen5 renegotiates the rate
-upward and the reader stays there until something sets it back.
+To answer precisely: I saw the rate *change* once, between those two days. After that I
+stopped being able to tell, because by then my code was trying several rates and
+keeping whichever worked, so it would have absorbed any further moves without
+mentioning them. What the two days had in common is that Gen5 had driven the reader
+before the second one. My guess — and it is a guess, I never tested it deliberately —
+is that Gen5 negotiates the rate upward and the reader stays there until something sets
+it back.
 
 What I did about it is probably the useful part for a backend: rather than pick a rate,
 I walk them. `EpochReader` tries 9600, 38400, 19200, 57600, 115200, 38461 in that order
@@ -130,12 +133,16 @@ connect and it has not failed since. I'd suggest the same for a PyLabRobot backe
 because a hardcoded 9600 will work for months and then mysteriously not, on a reader
 someone else plugged Gen5 into.
 
-One correction to my own docs while I'm here: `PROTOCOL.md` still says "stay at 9600",
-which was true of the first day and wrong as a general rule. The 38461 fallback does
-return noise on this reader, but 38400 is real.
+And thank you for catching the contradiction — it was a real error in my docs, not just
+in the post. `PROTOCOL.md` said "stay at 9600", which was true of the first day and
+wrong as a general rule. I've corrected it: it now records what the reader did on both
+days and recommends walking the rates. The 38461 fallback does return noise on this
+reader, but 38400 is real.
 
-Good luck with the repair — and if you do get an Epoch backend working, say so here. I
-know of at least one other lab in the same position: instrument fine, activations gone.
+Good luck with the repair, and do say here if you get an Epoch backend working. Mine
+was in exactly the position yours is heading out of — instrument perfectly fine,
+licence activations gone — which is the whole reason the repo exists, so I'd be glad to
+see the protocol end up somewhere more permanent than my notes.
 
 Best,
 Gabo
