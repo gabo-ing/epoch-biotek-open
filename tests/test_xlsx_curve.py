@@ -17,7 +17,7 @@ from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from epoch_open import curve                     # noqa: E402
+from epoch_open import curve, xlsx               # noqa: E402
 from epoch_open.xlsx import (curve_to_detail, curve_to_summary,  # noqa: E402
                              export_curve)
 
@@ -74,7 +74,8 @@ class TestCurveWorkbook:
         path, _fit, _results = _written("curve-sheets.xlsx")
         with zipfile.ZipFile(path) as archive:
             workbook = archive.read("xl/workbook.xml").decode()
-        for sheet in ("Resumen", "Curva", "Detalle"):
+        for sheet in (xlsx.TEXT["sheet_summary"], xlsx.TEXT["sheet_curve"],
+                      xlsx.TEXT["sheet_detail"]):
             assert sheet in workbook, f"no {sheet} sheet"
 
     def test_the_standards_travel_with_the_results(self):
@@ -87,14 +88,15 @@ class TestCurveWorkbook:
     def test_the_fit_is_recorded_not_just_a_pass_mark(self):
         path, _fit, _results = _written("curve-fit.xlsx")
         text = _text(path)
-        for label in ("Pendiente", "Intercepto", "r2", "Peor residual"):
+        for label in (xlsx.TEXT["slope"], xlsx.TEXT["intercept"],
+                      xlsx.TEXT["r2"], xlsx.TEXT["worst_residual"]):
             assert label in text, f"{label} missing from the workbook"
 
     def test_a_sample_off_the_curve_keeps_its_warning_in_the_file(self):
         """The warning has to survive into the spreadsheet, not only the screen."""
         path, _fit, results = _written("curve-range.xlsx")
         assert not results[1].in_range
-        assert "diluye" in _text(path).lower()
+        assert "dilu" in _text(path).lower()
 
     def test_the_sample_name_is_used_when_there_is_one(self):
         path, _fit, _results = _written("curve-names.xlsx")
@@ -139,7 +141,7 @@ class TestABatchReadAtTwoWavelengths:
         rows = curve_to_summary(results, "ug/mL")
         header = rows[0]
         nm = header.index("nm")
-        well = header.index("Pozo")
+        well = header.index(xlsx.TEXT["curve_summary_headers"][2])
         a1_rows = [r for r in rows[1:] if r[well] == "A1"]
         assert len(a1_rows) == 2
         assert {r[nm] for r in a1_rows} == {490, 530}, (
@@ -153,7 +155,7 @@ class TestABatchReadAtTwoWavelengths:
         export_curve(path, results, None, [530], unit="ug/mL")
         text = _text(path)
         assert "490" in text and "530" in text
-        assert "Longitudes de onda leidas" in text, (
+        assert xlsx.TEXT["wavelengths_read"] in text, (
             "the footer must summarise the batch, not name one read's setting")
 
     def test_the_detail_sheet_has_a_column_for_each_wavelength(self):
@@ -197,15 +199,16 @@ class TestAWorkbookWithACurvePerWavelength:
             path.unlink()
         export_curve(path, [], self._fits(), [490, 530], unit="ug/mL")
         text = _text(path)
-        assert "Curva a 490 nm" in text
-        assert "Curva a 530 nm" in text
+        assert xlsx.TEXT["curve_at"].format(nm=490) in text
+        assert xlsx.TEXT["curve_at"].format(nm=530) in text
 
     def test_each_curve_reports_its_own_r2(self):
         path = _out_dir() / "curve-per-wavelength-r2.xlsx"
         if path.exists():
             path.unlink()
         export_curve(path, [], self._fits(), [490, 530], unit="ug/mL")
-        assert _text(path).count("r2 de la curva a") == 2
+        assert _text(path).count(
+            xlsx.TEXT["r2_at"].split("{")[0]) == 2
 
     def test_a_single_curve_still_reads_as_one(self):
         """The ordinary case must not have grown wavelength labels."""
@@ -215,5 +218,5 @@ class TestAWorkbookWithACurvePerWavelength:
         export_curve(path, [], curve.fit_standards(STANDARDS), [530],
                      unit="ug/mL")
         text = _text(path)
-        assert "Pendiente" in text
-        assert "Curva a " not in text
+        assert xlsx.TEXT["slope"] in text
+        assert xlsx.TEXT["curve_at"].split("{")[0] not in text

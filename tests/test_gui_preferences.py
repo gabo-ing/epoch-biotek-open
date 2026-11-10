@@ -69,20 +69,29 @@ class TestItShowsWhatIsInForce:
             cfg = config.Config()
             cfg.blank_cv_limit_percent = 7.5
             dialog = _dialog(app, cfg)
-            assert dialog.fields["cv"].get() == "7,5"
+            mark = gui.TEXT["decimal"]
+            assert dialog.fields["cv"].get() == f"7{mark}5"
             dialog.destroy()
         finally:
             app.destroy()
 
-    def test_the_decimal_mark_is_the_one_the_lab_writes(self):
-        """Spanish throughout the rest of the screen, so a comma here too."""
+    def test_the_decimal_mark_follows_the_language(self):
+        """A comma in Spanish, a point in English.
+
+        The field accepts either on the way in -- that has always been true --
+        but what it *shows* used to be a comma whatever the language, which
+        reads as a typo to anyone who writes 0.1.
+        """
         app = _app()
         if app is None:
             return
         try:
             dialog = _dialog(app)
-            assert "," in dialog.fields["ref_limit"].get()
-            assert "." not in dialog.fields["ref_limit"].get()
+            mark = gui.TEXT["decimal"]
+            other = "." if mark == "," else ","
+            shown = dialog.fields["ref_limit"].get()
+            assert mark in shown, f"{shown!r} has no {mark!r}"
+            assert other not in shown, f"{shown!r} still has {other!r}"
             dialog.destroy()
         finally:
             app.destroy()
@@ -95,8 +104,9 @@ class TestItShowsWhatIsInForce:
         try:
             dialog = _dialog(app)
             dialog._defaults()
-            assert dialog.fields["cv"].get() == "10,0"
-            assert dialog.fields["ref_limit"].get() == "0,1"
+            mark = gui.TEXT["decimal"]
+            assert dialog.fields["cv"].get() == f"10{mark}0"
+            assert dialog.fields["ref_limit"].get() == f"0{mark}1"
             assert dialog.fields["ref_nm"].get() == "320"
             dialog.destroy()
         finally:

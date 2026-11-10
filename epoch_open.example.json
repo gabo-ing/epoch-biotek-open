@@ -1,5 +1,9 @@
 {
-  "_comment": "Rename to epoch_open.json and put it beside EpochTake3.exe. You do not need to edit this by hand: use 'Cambiar placa...' in the program.",
+  "_comment": "Rename to epoch_open.json and put it beside EpochTake3.exe. You do not need to edit this by hand: use 'Change plate...' in the program.",
+
+  "_language_comment": "Interface language: \"en\" or \"es\". English is the default, so a lab that works in Spanish sets this once, here or in Preferences. Both programs share it, and so does the spreadsheet they write. A one-off override without editing anything: run with --lang es.",
+
+  "language": "en",
 
   "reader_serial": null,
 

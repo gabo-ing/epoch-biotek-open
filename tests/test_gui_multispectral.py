@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 try:
     from epoch_open import curve, gui_curve
+    from epoch_open.gui_curve import TEXT
     from epoch_open.reader import MockCurveReader
     IMPORTED = True
 except ImportError:          # no tkinter on this machine
@@ -31,6 +32,21 @@ def _app(seed: int = 5):
         return gui_curve.App(MockCurveReader(seed=seed))
     except Exception:        # no X display
         return None
+
+
+def _on_screen(widget, text):
+    """Whether any widget in the tree actually displays `text`.
+
+    Asserting on the table alone would pass for a string nothing renders,
+    which is the failure mode worth guarding: the Take3 warning is the one
+    piece of text in this program whose absence could cost a plate.
+    """
+    try:
+        if text in str(widget.cget("text")):
+            return True
+    except Exception:
+        pass
+    return any(_on_screen(child, text) for child in widget.winfo_children())
 
 
 def _mark(app, role, wells):
@@ -357,10 +373,8 @@ class TestWhatTheScreenSays:
         try:
             warning = gui_curve.TEXT["take3_warning"]
             assert "Take3" in warning
-            # The consequence, which is what stops someone, and the
-            # alternative, which is what they do instead.
-            assert "irreversible" in warning.lower()
-            assert "transparentes" in warning.lower()
+            assert _on_screen(app, warning), (
+                "the warning exists in the table but is on no widget")
         finally:
             app.destroy()
 
@@ -375,8 +389,8 @@ class TestWhatTheScreenSays:
             assert app.curve_fields["n"].cget("text") == "5"
             assert app.curve_fields["state"].cget("text") == \
                 gui_curve.TEXT["curve_usable"]
-            # Spanish decimal mark, as the rest of the program uses.
-            assert "," in app.curve_fields["r2"].cget("text")
+            # The decimal mark of the language in force, as elsewhere.
+            assert TEXT["decimal"] in app.curve_fields["r2"].cget("text")
         finally:
             app.destroy()
 
@@ -558,6 +572,21 @@ class TestTheStepsCanBeWalkedInOrder:
 class TestItSaysWhatIsMissing:
     """A greyed-out button with no reason is worse than an error message."""
 
+    def test_the_warning_names_the_consequence_and_the_alternative(self):
+        """Both halves have to survive translation.
+
+        "Do not use the Take3" on its own is a rule to be forgotten. What
+        stops somebody is the consequence, and what they need next is the
+        alternative, so each language is checked for both rather than for a
+        word count.
+        """
+        tables = gui_curve.TEXT_BY_LANGUAGE
+        for code, expected in (("en", ("damaged", "clear plastic")),
+                               ("es", ("dañarse", "transparentes"))):
+            text = tables[code]["take3_warning"].lower()
+            for part in expected:
+                assert part in text, f"{code}: no {part!r} in the warning"
+
     def test_it_names_the_next_action_at_every_stage(self):
         app = _app()
         if app is None:
@@ -568,12 +597,12 @@ class TestItSaysWhatIsMissing:
             app.role.set(gui_curve.BLANK)
             for well in ("A1", "B1", "C1"):
                 app._click_well(well)
-            assert "Leer blanco" in app.next_label.cget("text")
+            assert TEXT["next_read_blank"] in app.next_label.cget("text")
 
             app._read_blank()
             # The moment Gabo got stuck: blank read, everything else grey.
             said = app.next_label.cget("text")
-            assert "patron" in said.lower(), (
+            assert TEXT["role_patron"].lower() in said.lower(), (
                 f"after the blank it said {said!r}, which does not mention "
                 "the standards that are actually missing")
             assert str(curve.MIN_STANDARDS) in said
@@ -611,7 +640,7 @@ class TestItSaysWhatIsMissing:
         except Exception:
             return
         try:
-            assert "lector" in app.next_label.cget("text").lower()
+            assert app.next_label.cget("text") == TEXT["next_no_reader"]
         finally:
             app.destroy()
 
@@ -692,11 +721,12 @@ class TestAPlainReadNeedsNothing:
         try:
             app._refresh_state()
             first = app.next_label.cget("text").lower()
-            assert "muestra" in first
+            assert TEXT["next_empty_plate"].lower() == first
 
             _mark(app, gui_curve.SAMPLE, ["A1"])
             app._refresh_state()
-            assert "leer muestras" in app.next_label.cget("text").lower()
+            assert (TEXT["next_read_samples"]
+                    in app.next_label.cget("text"))
         finally:
             app.destroy()
 

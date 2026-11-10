@@ -53,8 +53,8 @@ class TestNoReaderMeansNoNumbers:
         if app is None:
             return
         try:
-            assert "lector" in app.banner.cget("text").lower()
-            assert "enciend" in app.status.cget("text").lower()
+            assert gui.TEXT["no_reader"] in app.banner.cget("text")
+            assert gui.TEXT["no_reader_hint"] in app.status.cget("text")
         finally:
             app.destroy()
 
@@ -117,6 +117,7 @@ class TestSimulatorMustBeAskedFor:
             return
         try:
             assert app.simulated is True
-            assert "SIMULACION" in app.banner.cget("text")
+            assert gui.TEXT["simulated"].split(" - ")[0] in (
+                app.banner.cget("text"))
         finally:
             app.destroy()

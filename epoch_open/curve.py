@@ -36,6 +36,8 @@ are all the caller's business.
 
 from dataclasses import dataclass, field
 
+from . import i18n
+
 # Where to read the coloured product. 530 nm is the usual figure for Salkowski
 # IAA work, but published protocols range over 530-540 and the true peak moves
 # with the reagent formulation, so this is a default to be overridden rather
@@ -104,7 +106,60 @@ class CurveError(ValueError):
 
 
 # Spanish, because that is the language of the lab that uses this.
-MESSAGES = {
+_EN_MESSAGES = {
+    "above_range": (
+        "Absorbance ({absorbance:.3f}) is above the highest standard "
+        "({top:.3f}). The curve does not reach this far: dilute the sample "
+        "and read it again. The number shown is an extrapolation."
+    ),
+    "below_range": (
+        "Absorbance ({absorbance:.3f}) is below the lowest standard. The "
+        "sample is below what this curve can measure."
+    ),
+    "negative": (
+        "Negative concentration: the sample read below the reagent blank. "
+        "Usually a contaminated blank, or extra reagent in the sample well."
+    ),
+    "turbid": (
+        "High {reference_nm} nm reference ({reference:.3f}): the well is "
+        "turbid. Spin or filter the supernatant and read again; scattering "
+        "raises the absorbance without any colour being there."
+    ),
+}
+
+_EN_SHORT_MESSAGES = {
+    "above_range": "Out of curve: dilute and repeat",
+    "below_range": "Below the curve",
+    "negative": "Negative concentration",
+    "turbid": "Turbid well",
+}
+
+_EN_FIT_MESSAGES = {
+    "r_squared": (
+        "The curve fits poorly (r2 = {r_squared:.4f}, below {limit:.2f}). "
+        "Check the standards before using these results."
+    ),
+    "thin": (
+        "Only {n} standards. The curve holds, but with so few points a "
+        "pipetting error cannot be told from the real slope."
+    ),
+    "outlier": (
+        "Standard {well} ({concentration:g} {unit}) falls off the line "
+        "further than the others. Check its dilution, or drop it and fit "
+        "again."
+    ),
+    "slope": (
+        "The curve falls instead of rising, or is flat. More colour absorbs "
+        "more, so something is the wrong way round: standards swapped, the "
+        "wrong wavelength, or reagent that did not react."
+    ),
+    "duplicate": (
+        "Every standard has the same concentration. At least two different "
+        "concentrations are needed to define a line."
+    ),
+}
+
+_ES_MESSAGES = {
     "above_range": (
         "Absorbancia ({absorbance:.3f}) por encima del patron mas alto "
         "({top:.3f}). La curva no llega hasta aqui: diluye la muestra y "
@@ -126,15 +181,23 @@ MESSAGES = {
     ),
 }
 
-SHORT_MESSAGES = {
+MESSAGES_BY_LANGUAGE = {"en": _EN_MESSAGES, "es": _ES_MESSAGES}
+
+MESSAGES = i18n.register({}, MESSAGES_BY_LANGUAGE)
+
+_ES_SHORT_MESSAGES = {
     "above_range": "Fuera de curva: diluir y repetir",
     "below_range": "Por debajo de la curva",
     "negative": "Concentracion negativa",
     "turbid": "Pozo turbio",
 }
 
+SHORT_MESSAGES_BY_LANGUAGE = {"en": _EN_SHORT_MESSAGES, "es": _ES_SHORT_MESSAGES}
+
+SHORT_MESSAGES = i18n.register({}, SHORT_MESSAGES_BY_LANGUAGE)
+
 # Said about the curve as a whole rather than about one sample.
-FIT_MESSAGES = {
+_ES_FIT_MESSAGES = {
     "r_squared": (
         "La curva ajusta mal (r2 = {r_squared:.4f}, por debajo de "
         "{limit:.2f}). Revisa los patrones antes de usar estos resultados."
@@ -157,6 +220,10 @@ FIT_MESSAGES = {
         "menos dos concentraciones distintas para definir una linea."
     ),
 }
+
+FIT_MESSAGES_BY_LANGUAGE = {"en": _EN_FIT_MESSAGES, "es": _ES_FIT_MESSAGES}
+
+FIT_MESSAGES = i18n.register({}, FIT_MESSAGES_BY_LANGUAGE)
 
 
 @dataclass(frozen=True)

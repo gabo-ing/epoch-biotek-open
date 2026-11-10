@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from . import i18n
+
 CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -201,6 +203,107 @@ def write_workbook(path: str | Path, sheets: list[tuple]) -> Path:
     return path
 
 
+# What the workbook calls things, per language.
+#
+# The English is Gen5's own vocabulary wherever Gen5 has a word for the thing
+# -- "Standard", "Known concentration", "Blank", "Reference wavelength" --
+# read off its help files and its exported result tables. Someone who has
+# used the instrument's own software should not have to learn a second set of
+# names for the same quantities, and someone comparing the two files side by
+# side should be able to line the columns up by eye.
+#
+# The detail sheet's own headers are deliberately *not* in here: they already
+# copy Gen5's export exactly ("Sample Read#", "Location", "260 Raw") in both
+# languages, which is what makes that sheet recognisable.
+_EN_TEXT = {
+    "sheet_summary": "Summary",
+    "sheet_detail": "Detail",
+    "sheet_curve": "Curve",
+
+    "summary_headers": ["Sample", "Well", "Read", "Conc.", "Unit",
+                        "260/280", "260/230", "Notes"],
+    "curve_summary_headers": ["Read", "Sample", "Well", "nm", "Ref. nm",
+                              "Absorbance", "Concentration", "Unit",
+                              "In range", "Notes"],
+    "curve_fit_headers": ["Well", "Known concentration", "Absorbance",
+                          "Residual"],
+    "detail_headers": ["Read", "Well", "Role"],
+
+    "read_on": "Read on",
+    "in_range_yes": "yes",
+    "in_range_no": "NO",
+    "role_standard": "standard",
+    "role_sample": "sample",
+
+    "curve_at": "Curve at {nm} nm",
+    "curve_plain": "Curve",
+    "fit": "Fit",
+    "fit_formula": "absorbance = slope x concentration + intercept",
+    "slope": "Slope",
+    "intercept": "Intercept",
+    "r2": "r2",
+    "worst_residual": "Worst residual",
+    "standards": "Standards",
+    "unit": "Unit",
+    "measurable_range": "Measurable range (absorbance)",
+    "status": "Status",
+    "usable": "USABLE",
+    "not_usable": "NOT USABLE",
+    "curve_note": "Curve note",
+    "r2_at": "r2 of the curve at {nm} nm",
+    "r2_plain": "r2 of the curve",
+    "no_curve_label": "Curve",
+    "no_curve": "none: absorbance read directly",
+    "wavelengths_read": "Wavelengths read",
+}
+
+_ES_TEXT = {
+    "sheet_summary": "Resumen",
+    "sheet_detail": "Detalle",
+    "sheet_curve": "Curva",
+
+    "summary_headers": ["Muestra", "Pozo", "Lectura", "Conc.", "Unidad",
+                        "260/280", "260/230", "Aviso"],
+    "curve_summary_headers": ["Lectura", "Muestra", "Pozo", "nm", "Ref. nm",
+                              "Absorbancia", "Concentracion", "Unidad",
+                              "En rango", "Aviso"],
+    "curve_fit_headers": ["Pozo", "Concentracion patron", "Absorbancia",
+                          "Residual"],
+    "detail_headers": ["Lectura", "Pozo", "Rol"],
+
+    "read_on": "Leido el",
+    "in_range_yes": "si",
+    "in_range_no": "NO",
+    "role_standard": "patron",
+    "role_sample": "muestra",
+
+    "curve_at": "Curva a {nm} nm",
+    "curve_plain": "Curva",
+    "fit": "Ajuste",
+    "fit_formula": "absorbancia = pendiente x concentracion + intercepto",
+    "slope": "Pendiente",
+    "intercept": "Intercepto",
+    "r2": "r2",
+    "worst_residual": "Peor residual",
+    "standards": "Patrones",
+    "unit": "Unidad",
+    "measurable_range": "Rango medible (absorbancia)",
+    "status": "Estado",
+    "usable": "UTILIZABLE",
+    "not_usable": "NO UTILIZABLE",
+    "curve_note": "Aviso de la curva",
+    "r2_at": "r2 de la curva a {nm} nm",
+    "r2_plain": "r2 de la curva",
+    "no_curve_label": "Curva",
+    "no_curve": "ninguna: lectura directa en absorbancia",
+    "wavelengths_read": "Longitudes de onda leidas",
+}
+
+TEXT_BY_LANGUAGE = {"en": _EN_TEXT, "es": _ES_TEXT}
+
+TEXT = i18n.register({}, TEXT_BY_LANGUAGE)
+
+
 # Columns follow Gen5's own Take3 export, so the sheet looks familiar, with a
 # sample-name column and the notes this software adds.
 HEADERS = [
@@ -245,9 +348,6 @@ def results_to_rows(results, sample_names: dict | None = None) -> list[list]:
     return rows
 
 
-SUMMARY_HEADERS = [
-    "Muestra", "Pozo", "Lectura", "Conc.", "Unidad", "260/280", "260/230", "Aviso",
-]
 SUMMARY_WIDTHS = [26, 8, 9, 11, 9, 10, 10, 50]
 
 
@@ -264,7 +364,7 @@ def results_to_summary(results, sample_names: dict | None = None) -> list[list]:
     def rounded(value, digits):
         return round(value, digits) if value is not None else ""
 
-    rows = [list(SUMMARY_HEADERS)]
+    rows = [list(TEXT["summary_headers"])]
     for item in results:
         read_number, r = item if isinstance(item, tuple) else (1, item)
         # Naming is optional. An unnamed sample falls back to its well, so the
@@ -288,7 +388,8 @@ def export_results(path, results, sample_names=None, metadata: dict | None = Non
     summary = results_to_summary(results, sample_names)
 
     summary.append([])
-    summary.append(["Leido el", datetime.now().strftime("%Y-%m-%d %H:%M")])
+    summary.append([TEXT["read_on"],
+                    datetime.now().strftime("%Y-%m-%d %H:%M")])
     for key, value in (metadata or {}).items():
         summary.append([key, value])
 
@@ -297,8 +398,8 @@ def export_results(path, results, sample_names=None, metadata: dict | None = Non
     return write_workbook(
         path,
         [
-            ("Resumen", summary, SUMMARY_WIDTHS),
-            ("Detalle", detail, WIDTHS),
+            (TEXT["sheet_summary"], summary, SUMMARY_WIDTHS),
+            (TEXT["sheet_detail"], detail, WIDTHS),
         ],
     )
 
@@ -314,13 +415,8 @@ def export_results(path, results, sample_names=None, metadata: dict | None = Non
 # curve cannot be checked by anybody later, including the person who measured
 # it.
 
-CURVE_SUMMARY_HEADERS = [
-    "Lectura", "Muestra", "Pozo", "nm", "Ref. nm", "Absorbancia",
-    "Concentracion", "Unidad", "En rango", "Aviso",
-]
 CURVE_SUMMARY_WIDTHS = [8, 24, 7, 7, 9, 13, 14, 10, 10, 46]
 
-CURVE_FIT_HEADERS = ["Pozo", "Concentracion patron", "Absorbancia", "Residual"]
 CURVE_FIT_WIDTHS = [10, 22, 13, 12]
 
 
@@ -331,7 +427,7 @@ def curve_to_summary(results, unit: str) -> list[list]:
     concentration, and the cell is left empty rather than filled with a zero
     that would read as a measurement.
     """
-    rows = [list(CURVE_SUMMARY_HEADERS)]
+    rows = [list(TEXT["curve_summary_headers"])]
     for result in results:
         quantified = result.concentration is not None
         rows.append([
@@ -343,7 +439,8 @@ def curve_to_summary(results, unit: str) -> list[list]:
             round(result.absorbance, 4),
             round(result.concentration, 3) if quantified else "",
             unit if quantified else "",
-            ("si" if result.in_range else "NO") if quantified else "",
+            (TEXT["in_range_yes"] if result.in_range
+             else TEXT["in_range_no"]) if quantified else "",
             "  ".join(str(n) for n in result.notes),
         ])
     return rows
@@ -367,7 +464,8 @@ def curve_to_fit_sheet(fits) -> list[list]:
         if rows:
             rows.append([])
         if len(fits) > 1 or nm:
-            rows.append([f"Curva a {nm} nm" if nm else "Curva"])
+            rows.append([TEXT["curve_at"].format(nm=nm) if nm
+                         else TEXT["curve_plain"]])
         rows.extend(_one_fit_sheet(fit))
     return rows
 
@@ -379,7 +477,7 @@ def _one_fit_sheet(fit) -> list[list]:
     a pass mark. A reader six months from now needs to know not just that the
     curve was accepted but what it was accepted in spite of.
     """
-    rows = [list(CURVE_FIT_HEADERS)]
+    rows = [list(TEXT["curve_fit_headers"])]
     for standard in fit.standards:
         rows.append([
             standard.well,
@@ -389,18 +487,19 @@ def _one_fit_sheet(fit) -> list[list]:
         ])
 
     rows.append([])
-    rows.append(["Ajuste", "absorbancia = pendiente x concentracion + intercepto"])
-    rows.append(["Pendiente", round(fit.slope, 6)])
-    rows.append(["Intercepto", round(fit.intercept, 6)])
-    rows.append(["r2", round(fit.r_squared, 6)])
-    rows.append(["Peor residual", round(fit.worst_residual(), 5)])
-    rows.append(["Patrones", fit.n])
-    rows.append(["Unidad", fit.unit])
-    rows.append(["Rango medible (absorbancia)",
+    rows.append([TEXT["fit"], TEXT["fit_formula"]])
+    rows.append([TEXT["slope"], round(fit.slope, 6)])
+    rows.append([TEXT["intercept"], round(fit.intercept, 6)])
+    rows.append([TEXT["r2"], round(fit.r_squared, 6)])
+    rows.append([TEXT["worst_residual"], round(fit.worst_residual(), 5)])
+    rows.append([TEXT["standards"], fit.n])
+    rows.append([TEXT["unit"], fit.unit])
+    rows.append([TEXT["measurable_range"],
                  f"{fit.bottom:.4f} - {fit.top:.4f}"])
-    rows.append(["Estado", "UTILIZABLE" if fit.usable else "NO UTILIZABLE"])
+    rows.append([TEXT["status"],
+                 TEXT["usable"] if fit.usable else TEXT["not_usable"]])
     for note in fit.notes:
-        rows.append(["Aviso de la curva", str(note)])
+        rows.append([TEXT["curve_note"], str(note)])
     return rows
 
 
@@ -425,12 +524,14 @@ def curve_to_detail(results, fit, wavelengths) -> list[list]:
     # Every wavelength anything in this batch was read at, not just the
     # last read's.
     wavelengths = wavelengths_used(results, wavelengths)
-    rows = [["Lectura", "Pozo", "Rol"] + [f"{nm} nm" for nm in wavelengths]]
+    rows = [list(TEXT["detail_headers"])
+            + [f"{nm} nm" for nm in wavelengths]]
     for standard in (fit.standards if fit is not None else ()):
-        rows.append(["", standard.well, "patron"] + [""] * len(wavelengths))
+        rows.append(["", standard.well, TEXT["role_standard"]]
+                    + [""] * len(wavelengths))
     for result in results:
         rows.append(
-            [result.read_number or "", result.well, "muestra"]
+            [result.read_number or "", result.well, TEXT["role_sample"]]
             + [round(result.raw.get(nm), 4) if nm in result.raw else ""
                for nm in wavelengths]
         )
@@ -453,28 +554,31 @@ def export_curve(path, results, fits, wavelengths,
     summary = curve_to_summary(results, primary.unit if primary else unit)
 
     summary.append([])
-    summary.append(["Leido el", datetime.now().strftime("%Y-%m-%d %H:%M")])
+    summary.append([TEXT["read_on"],
+                    datetime.now().strftime("%Y-%m-%d %H:%M")])
     if fits:
         for nm, fit in sorted(fits.items()):
-            label = f"r2 de la curva a {nm} nm" if nm else "r2 de la curva"
+            label = (TEXT["r2_at"].format(nm=nm) if nm else TEXT["r2_plain"])
             summary.append([label, round(fit.r_squared, 6)])
-        summary.append(["Patrones", primary.n])
+        summary.append([TEXT["standards"], primary.n])
     else:
-        summary.append(["Curva", "ninguna: lectura directa en absorbancia"])
+        summary.append([TEXT["no_curve_label"], TEXT["no_curve"]])
 
     # Named here as a summary of the batch, never as a setting that applies
     # to every row: the per-row columns are what say how each was measured.
     used = wavelengths_used(results, wavelengths)
     summary.append([
-        "Longitudes de onda leidas",
+        TEXT["wavelengths_read"],
         ", ".join(f"{nm} nm" for nm in used) if used else "-",
     ])
     for key, value in (metadata or {}).items():
         summary.append([key, value])
 
-    sheets = [("Resumen", summary, CURVE_SUMMARY_WIDTHS)]
+    sheets = [(TEXT["sheet_summary"], summary, CURVE_SUMMARY_WIDTHS)]
     if fits:
-        sheets.append(("Curva", curve_to_fit_sheet(fits), CURVE_FIT_WIDTHS))
+        sheets.append((TEXT["sheet_curve"], curve_to_fit_sheet(fits),
+                       CURVE_FIT_WIDTHS))
     sheets.append(
-        ("Detalle", curve_to_detail(results, primary, wavelengths), None))
+        (TEXT["sheet_detail"],
+         curve_to_detail(results, primary, wavelengths), None))
     return write_workbook(path, sheets)

@@ -63,7 +63,8 @@ class TestReaderAppears:
             assert app.simulated is False
             assert app.lost is False
             assert app.info.serial == "254717"
-            assert "Lector" in app.banner.cget("text")
+            assert gui.TEXT["connected"].split("{")[0].strip() in (
+                app.banner.cget("text"))
         finally:
             app.destroy()
 
@@ -144,7 +145,7 @@ class TestReaderDisappears:
             assert app.lost is True
             # Never a silent fall back to fabricated data.
             assert app.simulated is False
-            assert "NO RESPONDE" in app.banner.cget("text")
+            assert gui.TEXT["lost"].split(" - ")[0] in app.banner.cget("text")
         finally:
             app.destroy()
 

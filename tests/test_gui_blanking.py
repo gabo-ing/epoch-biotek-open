@@ -209,15 +209,15 @@ class TestTheStatusBlock:
             app.destroy()
 
     def test_the_cv_is_written_the_way_gen5_writes_it(self):
-        """Decimal comma, as the lab's own exports and screen use."""
+        """With the decimal mark of whichever language is in force."""
         app = _app()
         if app is None:
             return
         try:
             _blanking(app, {"A2": 0.002, "B2": 0.0, "C2": 0.0})
             shown = _field(app, "cv")
-            assert "," in shown and shown.endswith("%")
-            assert float(shown.rstrip("%").replace(",", ".")) > 0
+            assert gui.TEXT["decimal"] in shown and shown.endswith("%")
+            assert float(shown.rstrip("%").replace(",", ".")) > 0  # either mark
         finally:
             app.destroy()
 

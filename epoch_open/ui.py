@@ -512,3 +512,77 @@ def enable_dpi_awareness() -> None:
         pass
 
 
+
+
+class LanguageDialog(tk.Toplevel):
+    """Pick the language, in both languages at once.
+
+    Shared by the two programs because both need it and neither should be the
+    one that has it. epoch-take3 reaches it from its Preferences dialog, which
+    is where a Gen5 user would look; epoch-multispectral has no preferences of
+    its own, so it has a button of its own.
+
+    The labels are deliberately bilingual -- "Language / Idioma" -- since the
+    person who most needs this dialog is by definition looking at an interface
+    they cannot read. The same reasoning is why each language is named in
+    itself: "Espanol", not "Spanish".
+
+    It changes the setting and says so. It does not redraw the running
+    window: widgets copy their text when they are built, and rebuilding two
+    screens live would be a great deal of machinery for a program somebody
+    opens once a morning and leaves open.
+    """
+
+    TITLE = "Language / Idioma"
+    PROMPT = "Language / Idioma:"
+    NOTE = ("Takes effect next time the program starts.\n"
+            "Se aplica la proxima vez que abras el programa.")
+    OK = "OK"
+    CANCEL = "Cancel / Cancelar"
+
+    def __init__(self, parent, current, languages):
+        super().__init__(parent)
+        from tkinter import ttk
+
+        self.title(self.TITLE)
+        self.transient(parent)
+        self.resizable(False, False)
+        self.configure(bg=CANVAS)
+        self.result = None
+
+        body = ttk.Frame(self, padding=16)
+        body.pack(fill="both", expand=True)
+
+        row = ttk.Frame(body)
+        row.pack(fill="x")
+        ttk.Label(row, text=self.PROMPT).pack(side="left", padx=(0, 8))
+
+        self._codes = list(languages)
+        self._names = [languages[code] for code in self._codes]
+        self.choice = tk.StringVar(
+            value=languages.get(current, self._names[0]))
+        box = ttk.Combobox(row, textvariable=self.choice, values=self._names,
+                           state="readonly", width=12)
+        box.pack(side="left")
+
+        ttk.Label(body, text=self.NOTE, style="Muted.TLabel").pack(
+            anchor="w", pady=(10, 12))
+
+        buttons = ttk.Frame(body)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text=self.CANCEL,
+                   command=self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(buttons, text=self.OK,
+                   command=self._save).pack(side="right")
+
+        self.bind("<Return>", lambda _e: self._save())
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.grab_set()
+
+    def _save(self) -> None:
+        name = self.choice.get()
+        for code, shown in zip(self._codes, self._names):
+            if shown == name:
+                self.result = code
+                break
+        self.destroy()

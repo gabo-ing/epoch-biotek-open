@@ -34,6 +34,8 @@ with old ones look like sample problems. See docs/QUANTIFICATION.md.
 
 from dataclasses import dataclass, field
 
+from . import i18n
+
 # What Gen5 puts in every cell of a new plate's pathlength table.
 DEFAULT_PATHLENGTH_MM = 0.5
 
@@ -95,7 +97,53 @@ class Warning_:
 
 
 # Spanish, because that is the language of the lab that uses this.
-MESSAGES = {
+_EN_MESSAGES = {
+    "high_reference": (
+        "High 320 nm reference ({reference:.3f} against the blank's "
+        "{blank:.3f}): something is scattering the light. Clean the window "
+        "and the drop, and read again."
+    ),
+    "noise_floor": (
+        "The absorbance is at the limit of detection; this concentration is "
+        "an estimate at best. Concentrate the sample if the number matters."
+    ),
+    "ratio_260_280": (
+        "260/280 of {ratio:.2f} is outside the usual {low}-{high} range for "
+        "{sample_type} (protein or solvent carryover)."
+    ),
+    "ratio_260_230": (
+        "260/230 of {ratio:.2f} is outside the usual {low}-{high} range "
+        "(guanidine, phenol or EDTA carryover)."
+    ),
+    "negative": (
+        "Negative concentration: the sample read below its own blank. "
+        "Usually the blank well was dirty, or the drop did not bridge both "
+        "surfaces."
+    ),
+    "blank_spread": (
+        "The blank wells do not agree with each other: {spread:.4f} AU "
+        "between the highest and the lowest ({cv:.1f}% at 260 nm). Clean the "
+        "plate, load the water again and repeat the blank before reading "
+        "samples: every result depends on it."
+    ),
+    "pathlength": (
+        "{well}: a pathlength of {value} mm is not credible for a Take3 well "
+        "(they are about 0.5 mm). Check the value copied from the plate's "
+        "sheet."
+    ),
+}
+
+_EN_SHORT_MESSAGES = {
+    "high_reference": "High 320 nm reference: clean and repeat",
+    "noise_floor": "Near the limit of detection",
+    "ratio_260_280": "260/280 out of range",
+    "ratio_260_230": "260/230 out of range",
+    "negative": "Negative concentration",
+    "blank_spread": "Blanks do not agree",
+    "pathlength": "Implausible pathlength",
+}
+
+_ES_MESSAGES = {
     "high_reference": (
         "Referencia 320 nm alta ({reference:.3f} frente a {blank:.3f} del blanco): "
         "algo esta dispersando la luz. Limpia la ventana y la gota, y vuelve a leer."
@@ -129,10 +177,14 @@ MESSAGES = {
     ),
 }
 
+MESSAGES_BY_LANGUAGE = {"en": _EN_MESSAGES, "es": _ES_MESSAGES}
+
+MESSAGES = i18n.register({}, MESSAGES_BY_LANGUAGE)
+
 
 # Short forms for the results table, where a full sentence does not fit. The long
 # message still goes to the spreadsheet, which has room for it.
-SHORT_MESSAGES = {
+_ES_SHORT_MESSAGES = {
     "high_reference": "Referencia 320 nm alta: limpia y repite",
     "noise_floor": "Cerca del limite de deteccion",
     "ratio_260_280": "260/280 fuera de rango",
@@ -141,6 +193,10 @@ SHORT_MESSAGES = {
     "blank_spread": "Los blancos no coinciden",
     "pathlength": "Camino optico poco creible",
 }
+
+SHORT_MESSAGES_BY_LANGUAGE = {"en": _EN_SHORT_MESSAGES, "es": _ES_SHORT_MESSAGES}
+
+SHORT_MESSAGES = i18n.register({}, SHORT_MESSAGES_BY_LANGUAGE)
 
 
 def warn(code: str, **params) -> Warning_:

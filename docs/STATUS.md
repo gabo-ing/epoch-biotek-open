@@ -90,6 +90,46 @@ Two honest wrinkles, both small and both still open:
    blank-corrected values appear on the Curva sheet, but their raw readings are
    recorded nowhere, so a reader cannot re-derive the fit from the file alone.
 
+## Language, added 10 November 2026
+
+The interface was Spanish only, which is right for the lab it was written for
+and wrong for a repository anyone can clone. It now speaks **English by
+default and Spanish on request**: 249 strings across eleven tables, chosen at
+startup from `"language"` in the configuration, the Preferences dialog, or
+`--lang`.
+
+Three things are worth knowing before changing any of it:
+
+- **The English is Gen5's vocabulary**, taken from its help files and its
+  exported result tables rather than translated back from the Spanish:
+  *Validation limit (CV%)*, *Reference wavelength*, *Standard*, *Known
+  concentration*, *Blank Results*, *CV (%)*, *Out-of-Range*. The point is that
+  the two programs' spreadsheets line up column by column.
+- **The detail sheet's headers are deliberately not translated.** They already
+  copy Gen5's export exactly -- `Sample Read#`, `Location`, `260 Raw` -- in
+  both languages, which is what makes that sheet recognisable.
+- **The decimal mark follows the language**: `0,1` in Spanish, `0.1` in
+  English. Input has always accepted either; it was the display that was
+  fixed to a comma.
+
+The mechanism is in `epoch_open/i18n.py`. Each module keeps its own `TEXT`
+dict and registers per-language tables against it; switching refills every
+dict **in place**, so the two hundred-odd `TEXT["key"]` call sites did not
+change and nothing has to be rebound. The refactor was proved inert before any
+English existed, by dumping every table to JSON and diffing it after.
+
+`tests/test_i18n.py` asserts the two languages have the same keys and the same
+`{placeholders}`, that nothing was copied across untranslated, and that an
+English workbook contains no Spanish. The whole suite passes under both
+languages -- `EPOCH_LANG=es python3 tests/run_tests.py` -- which is the check
+worth repeating, because a test that quotes one language's words silently
+stops testing anything in the other.
+
+**Verified on screen**, not only in tests: both programs were launched on a
+real display in both languages and their windows photographed or their widget
+trees read back. The layout survives; the English strings were kept no longer
+than the Spanish precisely so that it would.
+
 ## Still open
 
 - The **Take3 workbook records nothing about the blank** — no wells, no CV%, no
@@ -104,6 +144,14 @@ Two honest wrinkles, both small and both still open:
   (A9, H9) and cuvette (E10, E11) positions, the 4-parameter logistic fit ELISA wants,
   and Gen5's extrapolation factor.
 - Cosmetic: the "Leer tambien 230 nm" checkbox is oversized on macOS.
+- **This lab's own machines will come up in English after the upgrade** unless
+  `"language": "es"` is set in `epoch_open.json`, or chosen once in
+  Preferences. That is the cost of making English the default, and it is paid
+  by the people who need it least -- worth doing on each bench PC before the
+  next run.
+- The screenshots in the README and in `docs/img` still show the Spanish
+  interface. Not wrong, but an English-speaking visitor now sees a screen that
+  does not match what they will get.
 - **A blank read with no plate in the carrier reports nonsense, confidently.** See
   below.
 

@@ -33,7 +33,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import __version__, config, curve
+from . import __version__, config, curve, i18n, launch
 from .curve import CurveError, MOST_WAVELENGTHS
 from .reader import EpochReader, MockCurveReader, ReaderError
 from .ui import (ACTION, ACTION_HOVER, ACTION_IDLE, ACTION_IDLE_HOVER,
@@ -42,7 +42,7 @@ from .ui import (ACTION, ACTION_HOVER, ACTION_IDLE, ACTION_IDLE_HOVER,
                  GOOD, GOOD_BADGE, GOOD_BADGE_INK, INK, LINE, MUTED, PANEL,
                  STATUS_BAR, TITLE_BAR, TITLE_INK, TITLE_MUTED, WARN_BADGE,
                  WARN_BADGE_INK, WARN_INK, WARN_ROW, WELL_HOVER, WELL_INK,
-                 WELL_LINE, ZEBRA, RoundedButton, ScreenFit,
+                 WELL_LINE, ZEBRA, LanguageDialog, RoundedButton, ScreenFit,
                  enable_dpi_awareness)
 from .xlsx import export_curve
 
@@ -52,7 +52,151 @@ COLUMNS = tuple(range(1, 13))
 # The three things a well can be. Spanish, because these are labels.
 BLANK, STANDARD, SAMPLE = "blanco", "patron", "muestra"
 
-TEXT = {
+# The English, in Gen5's vocabulary: "Standard", "Known concentration",
+# "Reference wavelength", "Read Step", "Standard Curve". The one place it
+# departs is the Take3 warning, which is Gabo's own sentence and says what
+# happens rather than why -- that is the part that makes somebody put the
+# plate down.
+_EN_TEXT = {
+    "decimal": ".",
+    "language_button": "Language / Idioma...",
+    "results": "Results",
+    "title": "Epoch Multispectral",
+    "subtitle": "Colorimetric assays against a standard curve",
+    "simulated": ("SIMULATION MODE - no reader connected. These numbers are "
+                  "NOT real measurements."),
+    "connected": "Reader {model}, serial {serial}, firmware {firmware}, on {port}",
+    "no_reader": "Switch the reader on to measure. Looking for it...",
+    "no_reader_hint": ("The reader is not connected. Switch it on and wait a "
+                       "few seconds: the program finds it by itself."),
+    "lost": "THE READER IS NOT ANSWERING - check it is still on.",
+
+    "take3_warning": ("Do NOT use the Take3 plate for this kind of "
+                      "measurement. The plate could be damaged beyond "
+                      "repair. Use clear plastic plates only"),
+
+    "plate": "96-well plate",
+    "roles": "What I am marking:",
+    "role_blanco": "Blank",
+    "role_patron": "Standard",
+    "role_muestra": "Sample",
+    "role_hint": ("Click a well to mark it. Double click a standard for its "
+                  "concentration, a sample for its name."),
+
+    "settings": "Read",
+    "wavelength": "Wavelengths:",
+    "wavelength_change": "Change...",
+    "wl_title": "Wavelengths",
+    "wl_help": ("The same choices Gen5 offers in its Read Step. The reader "
+                "takes up to {most} per read, counting the reference, and "
+                "measures them all in a single pass."),
+    "wl_count": "How many:",
+    "wl_ref_group": "Reference",
+    "wl_save": "OK",
+    "wl_cancel": "Cancel",
+    "wl_primary": ("The first one is used for the standard curve. The others "
+                   "are measured and recorded, but a curve describes a single "
+                   "wavelength."),
+    "wl_bad": ("{value} will not do as a wavelength. The Epoch reads between "
+               "200 and 999 nm, in whole numbers."),
+    "wl_repeated": "Wavelength {value} is repeated.",
+    "wl_ref_clash": ("The reference ({value} nm) is also one of the measured "
+                     "wavelengths. Choose another, or drop the reference."),
+    "wavelength_hint": ("Up to {most}, comma separated. The first is the one\n"
+                        "used for the curve; the rest are read and kept too."),
+    "use_reference": "Subtract reference",
+    "unit": "Unit:",
+    "reference_hint": ("The reference corrects for turbidity and marks on the "
+                       "bottom of the well. If you use it, it is applied to "
+                       "the standards too."),
+
+    "read_blank": "1.  Read blank",
+    "read_standards": "2.  Read standards",
+    "read_samples": "3.  Read samples",
+    "end_batch": "4.  End batch  (save Excel)",
+    "scan": "Find peak",
+    "clear": "Clear all",
+
+    "curve": "Standard curve",
+    "curve_none": "No curve yet",
+    "curve_field_n": "Standards:",
+    "curve_field_slope": "Slope:",
+    "curve_field_r2": "r2:",
+    "curve_field_resid": "Worst residual:",
+    "curve_field_range": "Range (abs):",
+    "curve_field_state": "Status:",
+    "curve_usable": "USABLE",
+    "curve_unusable": "NOT USABLE",
+    "curve_unread": "NOT READ",
+    "curve_others": ("The curve shown is the one at {primary} nm. There are "
+                     "also curves at {others} nm, and each sample is computed "
+                     "against its own."),
+
+    "columns": ("Sample", "Read:Well", "nm", "Abs.", "Conc.", "Notes"),
+
+    "reading": "Reading... do not open the lid.",
+    "blank_done": "Blank read at {time}: mean absorbance {abs:.4f}.",
+    "standards_done": "Curve fitted on {n} standards, r2 = {r2:.4f}.",
+    "samples_done": "Read {read}: {n} samples. Batch total: {total}.",
+    "scan_done": ("Peak at {nm} nm. If that is not the value you have set, "
+                  "change it before fitting the curve."),
+    "scan_edge": ("Peak at {nm} nm, which is the edge of the scan: the real "
+                  "maximum may lie beyond it. Check the colour by eye."),
+
+    "no_blank_wells": "Mark at least one well as blank first.",
+    "no_standard_wells": ("Mark at least {n} wells as standards and give each "
+                          "one its concentration (double click)."),
+    "no_concentrations": ("Concentrations are missing on these standards: "
+                          "{wells}. Double click each one to type it in."),
+    "no_sample_wells": "Mark the sample wells.",
+    "no_blank_yet": "The blank has to be read first.",
+    "no_curve_yet": "The standards have to be read first.",
+    "curve_not_usable": ("This curve cannot be used to measure:\n\n{reason}"
+                         "\n\nPut it right before reading samples."),
+    "nothing_to_scan": "Mark a well with colour in it to find the peak.",
+    "nothing_to_save": "The batch is empty; there is nothing to save yet.",
+    "saved": "Saved to {path}. Batch closed.",
+    "save_error": "The file could not be saved:\n\n{error}",
+    "read_error": "The read failed:\n\n{error}",
+    "bad_wavelength": ("'{value}' will not do. Type between 1 and {most} "
+                       "wavelengths, comma separated, each between 200 and "
+                       "999 nm.\nFor example: 490, 530, 590"),
+    "too_many_wavelengths": ("That is {count} wavelengths, and the reader "
+                             "takes {most} per read, counting the reference."),
+    "conc_prompt": "Concentration of the standard in {well} ({unit}):",
+    "conc_title": "Standard concentration",
+    "name_prompt": "Name of the sample in {well}:",
+    "name_title": "Sample name",
+
+    "next_mark_blank": "Mark the reagent blank wells.",
+    "next_empty_plate": ("Mark sample wells to read absorbance, or start with "
+                         "the blank if you want concentrations."),
+    "next_read_blank": "Now press '1. Read blank'.",
+    "next_mark_standards": ("Mark at least {need} wells as standards (you "
+                            "have {have}), or read the samples as they are "
+                            "for absorbance only."),
+    "next_plain_read": ("Mark sample wells and press '3. Read samples' to "
+                        "read absorbance. For concentrations, mark at least "
+                        "{need} standards first."),
+    "next_concentrations": ("Double click each standard to type its "
+                            "concentration. Missing: {wells}."),
+    "next_read_standards": "Now press '2. Read standards'.",
+    "next_curve_bad": "The curve is not usable yet. See the note on the right.",
+    "next_mark_samples": "Mark the sample wells.",
+    "next_read_samples": "Now press '3. Read samples'.",
+    "next_save": "When you are done, press '4. End batch' to save.",
+    "next_no_reader": "Switch the reader on to measure.",
+    "next_bad_wavelength": ("Check the wavelength: it has to be between 200 "
+                            "and 999."),
+
+    "instructions": ("Reagent blank -> standards with their concentrations "
+                     "-> samples -> end batch."),
+}
+
+_ES_TEXT = {
+    "decimal": ",",
+    "language_button": "Idioma / Language...",
+    "results": "Resultados",
     "title": "Epoch Multispectral",
     "subtitle": "Ensayos colorimetricos con curva de calibrado",
     "simulated": ("MODO SIMULACION - no hay lector conectado. Los numeros NO "
@@ -197,6 +341,10 @@ TEXT = {
                      "muestras -> fin del lote."),
 }
 
+TEXT_BY_LANGUAGE = {"en": _EN_TEXT, "es": _ES_TEXT}
+
+TEXT = i18n.register({}, TEXT_BY_LANGUAGE)
+
 # Role colours. One hue per role so the plate can be read at a glance, with
 # the paler shade meaning "marked, not measured yet" and the stronger one
 # "measured". Built on the shared palette rather than beside it: the chrome,
@@ -214,6 +362,12 @@ ROLE_DONE = {
 }
 
 CONFIG = config.load()
+
+# Settle the language before any window exists: a widget copies its text when
+# it is built, so this has to happen first. A command-line --lang wins over
+# the configuration file, which is the escape hatch for somebody who cannot
+# read the dialog that would let them change it.
+i18n.set_language(launch.language_override() or CONFIG.language)
 READER_SERIAL = CONFIG.reader_serial
 
 
@@ -367,6 +521,8 @@ class App(ScreenFit, tk.Tk):
         ttk.Label(unit_row, text=TEXT["unit"], style="Card.TLabel").pack(side="left")
         ttk.Entry(unit_row, textvariable=self.unit, width=8).pack(side="left",
                                                                   padx=6)
+        ttk.Button(unit_row, text=TEXT["language_button"],
+                   command=self._choose_language).pack(side="right")
 
         # The one thing in this program that can damage the other one.
         # Wrapped wider and padded less on a short screen: the warning has to
@@ -501,7 +657,7 @@ class App(ScreenFit, tk.Tk):
         self.curve_notes.pack(fill="x", pady=(6, 0))
 
     def _build_results(self, parent) -> None:
-        frame = ttk.LabelFrame(parent, text="Resultados", padding=8,
+        frame = ttk.LabelFrame(parent, text=TEXT["results"], padding=8,
                                style="Card.TLabelframe")
         frame.pack(fill="both", expand=True)
 
@@ -673,6 +829,25 @@ class App(ScreenFit, tk.Tk):
         """The blank for one wavelength, or zero where none was read."""
         return self.blank_values.get(nm, 0.0)
 
+    def _choose_language(self) -> None:
+        """Change the language, and say that it starts next time.
+
+        Written to the configuration rather than applied to the running
+        window: every widget on screen copied its text when it was built.
+        """
+        dialog = LanguageDialog(self, CONFIG.language, i18n.LANGUAGES)
+        self.wait_window(dialog)
+        if dialog.result is None or dialog.result == CONFIG.language:
+            return
+        CONFIG.language = dialog.result
+        try:
+            config.save(CONFIG)
+        except OSError as exc:
+            messagebox.showerror(TEXT["title"], str(exc))
+            return
+        self._say(LanguageDialog.NOTE.splitlines()[
+            0 if dialog.result == "en" else 1])
+
     def _choose_wavelengths(self) -> None:
         """Open the read settings, and apply them if she accepts.
 
@@ -788,12 +963,12 @@ class App(ScreenFit, tk.Tk):
         fit = self.fit
         fields["n"].configure(text=str(fit.n))
         fields["slope"].configure(
-            text=f"{fit.slope:.5f}".replace(".", ","))
-        fields["r2"].configure(text=f"{fit.r_squared:.4f}".replace(".", ","))
+            text=f"{fit.slope:.5f}".replace(".", TEXT["decimal"]))
+        fields["r2"].configure(text=f"{fit.r_squared:.4f}".replace(".", TEXT["decimal"]))
         fields["resid"].configure(
-            text=f"{fit.worst_residual():.4f}".replace(".", ","))
+            text=f"{fit.worst_residual():.4f}".replace(".", TEXT["decimal"]))
         fields["range"].configure(
-            text=f"{fit.bottom:.3f} - {fit.top:.3f}".replace(".", ","))
+            text=f"{fit.bottom:.3f} - {fit.top:.3f}".replace(".", TEXT["decimal"]))
         fields["state"].configure(
             text=TEXT["curve_usable"] if fit.usable else TEXT["curve_unusable"],
             style="CardGood.TLabel" if fit.usable else "CardBad.TLabel")
@@ -1182,9 +1357,9 @@ class App(ScreenFit, tk.Tk):
                 f"{result.read_number}:{result.well}" if result.read_number
                 else result.well,
                 result.wavelength,
-                f"{result.absorbance:.4f}".replace(".", ","),
+                f"{result.absorbance:.4f}".replace(".", TEXT["decimal"]),
                 ("-" if result.concentration is None
-                 else f"{result.concentration:.2f}".replace(".", ",")),
+                 else f"{result.concentration:.2f}".replace(".", TEXT["decimal"])),
                 notes,
             ))
 

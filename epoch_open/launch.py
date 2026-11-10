@@ -69,3 +69,26 @@ def no_tkinter(exc: ModuleNotFoundError) -> int:
         file=sys.stderr,
     )
     return 1
+
+
+def language_override(argv=None) -> str | None:
+    """The language asked for on the command line, or in the environment.
+
+    `--lang es`, `--lang=es`, or `EPOCH_LANG=es`. It exists for the case the
+    configuration cannot help with: somebody has started the program, cannot
+    read the dialog that would let them change the language, and needs one
+    command that puts the interface into theirs. It also lets the screenshots
+    for the README be taken in both languages without editing a file.
+
+    Returns None when nothing was asked, so the caller can tell "not
+    specified" from "specified as the default".
+    """
+    import os
+
+    argv = list(sys.argv if argv is None else argv)
+    for index, arg in enumerate(argv):
+        if arg.startswith("--lang="):
+            return arg.split("=", 1)[1]
+        if arg == "--lang" and index + 1 < len(argv):
+            return argv[index + 1]
+    return os.environ.get("EPOCH_LANG") or None

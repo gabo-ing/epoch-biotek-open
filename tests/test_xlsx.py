@@ -13,6 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from epoch_open import xlsx                       # noqa: E402
 from epoch_open.quant import RawWell, quantify  # noqa: E402
 from epoch_open.xlsx import (  # noqa: E402
     column_letter,
@@ -169,7 +170,8 @@ class TestTwoSheetExport:
             workbook = z.read("xl/workbook.xml").decode()
         assert "xl/worksheets/sheet1.xml" in names
         assert "xl/worksheets/sheet2.xml" in names
-        assert "Resumen" in workbook and "Detalle" in workbook
+        assert (xlsx.TEXT["sheet_summary"] in workbook
+                and xlsx.TEXT["sheet_detail"] in workbook)
 
     def test_both_sheets_are_valid_xml(self):
         path = export_results(tmp_path_for("two_valid.xlsx"), self.make_results())
@@ -183,7 +185,7 @@ class TestTwoSheetExport:
         from epoch_open.xlsx import results_to_summary
 
         rows = results_to_summary(self.make_results(), {"C2": "APP 1a"})
-        assert rows[0][0] == "Muestra"
+        assert rows[0][0] == xlsx.TEXT["summary_headers"][0]
         assert rows[1][0] == "APP 1a"
         assert rows[1][1] == "C2"
 

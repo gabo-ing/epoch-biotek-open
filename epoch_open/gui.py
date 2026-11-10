@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import __version__, config, take3
+from . import __version__, config, i18n, launch, take3
 from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
                     BLANK_SPREAD_LIMIT_AU, HIGH_REFERENCE_MARGIN, QuantError,
                     REFERENCE_NM, blank_for, blank_report, quantify, unit_for,
@@ -25,7 +25,171 @@ from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import export_results
 
-TEXT = {
+# The English, in Gen5's vocabulary wherever Gen5 names the same thing:
+# "Validation limit (CV%)", "Reference wavelength", "Take3 Pathlength Data
+# Sheet", "blank". A technician who learned the instrument on its own software
+# should not have to learn a second name for a quantity they already know, and
+# the terms are also what they will search for when something goes wrong.
+#
+# Each button, status word and column header is kept no longer than its
+# Spanish counterpart. The layout was fitted to a 1366x768 laptop one well-lit
+# afternoon and a longer word would quietly undo that.
+_EN_TEXT = {
+    "decimal": ".",
+    "prefs_lang_group": "Language / Idioma",
+    "prefs_lang": "Interface language:",
+    "prefs_lang_note": ("Takes effect next time the program starts. Both "
+                        "programs share the setting, and so does the "
+                        "spreadsheet they write."),
+    "results": "Results",
+    "title": "Take3 Quantification - Epoch",
+    "simulated": ("SIMULATION MODE - no reader connected. These numbers are "
+                  "NOT real measurements."),
+    "connected": "Reader {model}, serial {serial}, firmware {firmware}, on {port}",
+    "searching": ("SIMULATION MODE - looking for the reader... These numbers "
+                  "are NOT real measurements."),
+    "lost": "THE READER IS NOT ANSWERING - check it is still on. Retrying...",
+    "no_reader": "Switch the reader on to measure. Looking for it...",
+    "no_reader_hint": ("The reader is not connected. Switch it on and wait a "
+                       "few seconds: the program finds it by itself and the "
+                       "read buttons come alive."),
+    "found_now": "Reader found and connected. You can take real readings now.",
+    "found_busy_title": "Reader found",
+    "found_busy": "A reader has been found, switched on.\n\nThe current batch holds SIMULATED data, which cannot be mixed with real measurements.\n\nDiscard the simulated batch and use the reader?",
+    "blank_plate": "Blank",
+    "sample_plate": "Samples",
+    "plate": "Take3 plate  {serial}",
+    "sample_type": "Sample type:",
+    "with_230": "Also read 230 nm (for 260/230)",
+    "read_blank": "1.  Read blank",
+    "read_samples": "2.  Read samples",
+    "end_batch": "3.  End batch  (save Excel)",
+    "clear_blank": "Clear",
+    "reset_blanks": "Reset",
+    "clear_samples": "Clear",
+    "all_samples": "All",
+    "wavelengths": "Wavelengths: {list}",
+    "plate_calibrated": "calibrated",
+    "plate_uncalibrated": "UNCALIBRATED",
+    "plate_change": "Change plate...",
+    "prefs_open": "Preferences...",
+    "prefs_title": "Preferences",
+    "prefs_help": ("These are the same settings Gen5 keeps in Take3 "
+                   "Preferences, at its factory values. Change them only if "
+                   "you know why."),
+    "prefs_blank_group": "Blank validation",
+    "prefs_cv": "Validation limit (CV%):",
+    "prefs_cv_help": ("Gen5 will not read samples while the highest CV% "
+                      "across the wavelengths is above this value. Its "
+                      "factory value is 10."),
+    "prefs_ref_group": "Reference wavelength",
+    "prefs_ref_nm": "Wavelength:",
+    "prefs_ref_limit": "Limit:",
+    "prefs_ref_unit": "OD at 0.5 mm",
+    "prefs_ref_help": ("If a sample's reference reading exceeds the blank's "
+                       "by more than this limit, the row is marked amber. "
+                       "Gen5 uses 0.1."),
+    "prefs_extra_group": "Settings particular to this program",
+    "prefs_spread": "Maximum spread (OD):",
+    "prefs_divergence": "Diverging well (OD):",
+    "prefs_extra_help": ("Gen5 has neither of these. The spread is a floor "
+                         "beneath the CV%, which is a ratio and so measures "
+                         "no absolute size. The divergence limit only decides "
+                         "which well is painted red; it does not block the "
+                         "read."),
+    "prefs_save": "OK",
+    "prefs_cancel": "Cancel",
+    "prefs_defaults": "Factory values",
+    "prefs_bad_value": ("{field}: '{value}' is not a valid number. It has to "
+                        "be greater than zero."),
+    "prefs_bad_nm": ("Reference wavelength: '{value}' will not do. The Epoch "
+                     "reads between 200 and 999 nm."),
+    "prefs_saved": "Preferences saved.",
+    "path_nominal": ("No pathlength sheet for this plate: the nominal 0.5 mm "
+                     "is used, so concentrations may be off by ~2%."),
+    "plate_dialog_title": "Take3 plate",
+    "plate_dialog_help": ("Copy in the values from the 'Take3 Pathlength Data "
+                          "Sheet' that came with the plate. Sixteen numbers, "
+                          "in mm, around 0.5."),
+    "plate_serial_label": "Plate serial number:",
+    "plate_save": "Save",
+    "plate_cancel": "Cancel",
+    "plate_nominal_btn": "Use nominal 0.5 mm",
+    "plate_saved": "Plate {serial} saved. It will be used from now on.",
+    "plate_bad_serial": "Type the plate's serial number.",
+    "plate_bad_value": ("{well}: '{value}' is not a valid number. Pathlengths "
+                        "run between 0.2 and 1.2 mm, usually about 0.5."),
+    "plate_incomplete": ("{n} wells are missing. Fill in all 16 values from "
+                         "the sheet, or choose 'Use nominal 0.5 mm'."),
+    "plate_known": "This plate was already on file; its values are shown.",
+    "blank_pending": "Blank not read yet",
+    "blank_state_unread": "NOT READ",
+    "blank_state_valid": "VALID",
+    "blank_state_invalid": "NOT VALID",
+    # Gen5's own word for a blanking whose wells disagree, kept so that the
+    # two programs say the same thing about the same plate.
+    "blank_state_diverging": "DIVERGING",
+    "blank_field_date": "Date:",
+    "blank_field_time": "Time:",
+    "blank_field_state": "Status:",
+    "blank_field_cv": "CV%:",
+    "blank_why_divergent": ("Some blank wells do not agree with the rest "
+                            "(in red). Discard them, or clean everything and "
+                            "blank again."),
+    "blank_why_cv": ("The blank wells vary too much among themselves (CV% "
+                     "above the limit). Clean the plate, load the water again "
+                     "and repeat the blank."),
+    "blank_why_single": ("A CV% cannot be computed from a single well, so "
+                         "there is no way to tell whether the blank is good. "
+                         "Mark at least two wells and repeat the blank."),
+    "blank_why_spread": ("The blank wells do not agree with each other. Clean "
+                         "the plate and blank again."),
+    "blank_why_pending": "Some wells are still unread (in blue).",
+    "blank_why_empty": "No blank wells are left.",
+    "blank_not_valid": ("The blank is not valid yet. Put it right before "
+                        "reading the samples:\n\n{reason}"),
+    "blank_invalid_say": "Blank NOT valid. {reason}",
+    "blank_done": "Blank read: {wells}",
+    "batch_empty": "Empty batch",
+    "batch_state": "Batch: {reads} reads, {total} samples",
+    "naming_hint": "Double click = name",
+    "grid_hint_blank": "Wells with water",
+    "grid_hint_sample": "Wells with sample",
+    "name_prompt": "Name of the sample in {well}:",
+    "name_title": "Sample name",
+    "no_blank_wells": "Mark the blank wells in the grid above first.",
+    "no_sample_wells": "Mark the sample wells in the grid below.",
+    "no_blank": "A blank has to be read first.",
+    "reading": "Reading... do not open the lid.",
+    "blank_ok": "Blank read at {time}. Now load the samples.",
+    "done": "Read {read}: {n} samples. Batch total: {total}.",
+    "nothing_to_save": "The batch is empty; there is nothing to save yet.",
+    "saved": "Saved to {path}. Batch closed.",
+    "save_error": "The file could not be saved:\n\n{error}",
+    "read_error": "The read failed:\n\n{error}",
+    "columns": ("Read:Well", "Conc.", "260/280", "260/230", "Notes"),
+    "column_conc": "Conc. ({unit})",
+    "instructions": (
+        "1. Load 2 uL of water in the blank wells and press 'Read blank'.\n"
+        "2. Clean, load 2 uL of each sample and press 'Read samples'. "
+        "You can repeat with more plates; it all accumulates in the same "
+        "batch.\n"
+        "3. When you are done, press 'End batch' to save the Excel file."
+    ),
+    "instructions_short": (
+        "Blank with water -> samples -> end batch. "
+        "Double click a well to name it."
+    ),
+}
+
+_ES_TEXT = {
+    "decimal": ",",
+    "prefs_lang_group": "Idioma / Language",
+    "prefs_lang": "Idioma de la interfaz:",
+    "prefs_lang_note": ("Se aplica la proxima vez que abras el programa. Los "
+                        "dos programas comparten el ajuste, y tambien el "
+                        "Excel que escriben."),
+    "results": "Resultados",
     "title": "Cuantificacion Take3 - Epoch",
     "simulated": "MODO SIMULACION - no hay lector conectado. Los numeros NO son medidas reales.",
     "connected": "Lector {model}, serie {serial}, firmware {firmware}, en {port}",
@@ -169,6 +333,10 @@ TEXT = {
     ),
 }
 
+TEXT_BY_LANGUAGE = {"en": _EN_TEXT, "es": _ES_TEXT}
+
+TEXT = i18n.register({}, TEXT_BY_LANGUAGE)
+
 SAMPLE_TYPES = ("dsDNA", "ssDNA", "RNA", "protein")
 
 
@@ -187,6 +355,12 @@ from .ui import (RoundedButton, ScreenFit, enable_dpi_awareness,
 # here is tied to one lab: a different reader and a different Take3 plate need a
 # config file, not a rebuild.
 CONFIG = config.load()
+
+# Settle the language before any window exists: a widget copies its text when
+# it is built, so this has to happen first. A command-line --lang wins over
+# the configuration file, which is the escape hatch for somebody who cannot
+# read the dialog that would let them change it.
+i18n.set_language(launch.language_override() or CONFIG.language)
 PLATE_SERIAL = CONFIG.plate_serial
 PLATE_READER_SERIAL = CONFIG.reader_serial
 
@@ -544,7 +718,7 @@ class App(ScreenFit, tk.Tk):
             self.action_buttons[key] = button
 
     def _build_results(self, parent) -> None:
-        frame = ttk.LabelFrame(parent, text="Resultados", padding=8,
+        frame = ttk.LabelFrame(parent, text=TEXT["results"], padding=8,
                                style="Card.TLabelframe")
         frame.pack(fill="both", expand=True)
 
@@ -706,7 +880,7 @@ class App(ScreenFit, tk.Tk):
         # read as perfect agreement rather than as nothing to compare.
         if self.blank_report and len(self.blank_report.wells) > 1:
             # Comma for the decimal mark, as Gen5 prints it here.
-            text = f"{self.blank_report.cv_260:.3f}".replace(".", ",") + "%"
+            text = f"{self.blank_report.cv_260:.3f}".replace(".", TEXT["decimal"]) + "%"
         else:
             text = "-"
         self.blank_fields["cv"].configure(text=text)
@@ -764,6 +938,9 @@ class App(ScreenFit, tk.Tk):
         CONFIG.reference_limit_od = dialog.result["ref_limit"]
         CONFIG.blank_spread_limit_au = dialog.result["spread"]
         CONFIG.blank_divergence_limit_au = dialog.result["divergence"]
+        # Stored, not applied live: every widget on screen already copied its
+        # text. Saying so is the whole of the behaviour here.
+        CONFIG.language = dialog.result.get("language", CONFIG.language)
         try:
             config.save(CONFIG)
         except OSError as exc:
@@ -1231,6 +1408,23 @@ class PreferencesDialog(tk.Toplevel):
                   wraplength=self.px(390),
                   style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
 
+        language = ttk.LabelFrame(body, text=TEXT["prefs_lang_group"],
+                                  padding=10, style="Card.TLabelframe")
+        language.pack(fill="x", pady=(0, 12))
+        row = ttk.Frame(language, style="Card.TFrame")
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text=TEXT["prefs_lang"], width=26,
+                  style="Card.TLabel").pack(side="left")
+        self._language_codes = list(i18n.LANGUAGES)
+        self._language_names = [i18n.LANGUAGES[c] for c in self._language_codes]
+        self.language = tk.StringVar(
+            value=i18n.LANGUAGES.get(config.language, self._language_names[0]))
+        ttk.Combobox(row, textvariable=self.language, state="readonly",
+                     values=self._language_names, width=12).pack(side="left")
+        ttk.Label(language, text=TEXT["prefs_lang_note"],
+                  wraplength=self.px(390),
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
+
         buttons = ttk.Frame(body)
         buttons.pack(fill="x")
         ttk.Button(buttons, text=TEXT["prefs_defaults"],
@@ -1248,7 +1442,7 @@ class PreferencesDialog(tk.Toplevel):
         row = ttk.Frame(parent, style="Card.TFrame")
         row.pack(fill="x", pady=2)
         ttk.Label(row, text=label, width=26, style="Card.TLabel").pack(side="left")
-        variable = tk.StringVar(value=str(value).replace(".", ","))
+        variable = tk.StringVar(value=str(value).replace(".", TEXT["decimal"]))
         entry = ttk.Entry(row, textvariable=variable, width=10)
         entry.pack(side="left")
         if suffix:
@@ -1263,7 +1457,7 @@ class PreferencesDialog(tk.Toplevel):
                            ("ref_limit", HIGH_REFERENCE_MARGIN),
                            ("spread", BLANK_SPREAD_LIMIT_AU),
                            ("divergence", BLANK_DIVERGENCE_LIMIT_AU)):
-            self.fields[key].set(str(value).replace(".", ","))
+            self.fields[key].set(str(value).replace(".", TEXT["decimal"]))
 
     def _number(self, key, label):
         """A positive number, with a comma accepted as the decimal mark."""
@@ -1297,11 +1491,19 @@ class PreferencesDialog(tk.Toplevel):
         # 320 nm and the whole correction is built on it. Changing it here
         # would be a lie, so it is checked and refused rather than ignored.
         shown = self.fields["ref_nm"].get().strip()
-        if shown not in (str(REFERENCE_NM), f"{REFERENCE_NM},0"):
+        # Either decimal mark, since the field accepts either and the
+        # displayed one now depends on the language.
+        if shown.replace(",", ".") not in (str(REFERENCE_NM),
+                                           f"{REFERENCE_NM}.0"):
             messagebox.showerror(
                 TEXT["prefs_title"],
                 TEXT["prefs_bad_nm"].format(value=shown), parent=self)
             return
+
+        for code, shown in zip(self._language_codes, self._language_names):
+            if shown == self.language.get():
+                values["language"] = code
+                break
 
         self.result = values
         self.destroy()

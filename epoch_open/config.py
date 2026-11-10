@@ -49,7 +49,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import quant
+from . import i18n, quant
 
 CONFIG_NAME = "epoch_open.json"
 
@@ -70,6 +70,11 @@ class Config:
     reference_limit_od: float = quant.HIGH_REFERENCE_MARGIN
     blank_spread_limit_au: float = quant.BLANK_SPREAD_LIMIT_AU
     blank_divergence_limit_au: float = quant.BLANK_DIVERGENCE_LIMIT_AU
+    # Which language the interface speaks. English by default, because a
+    # stranger cannot read a Spanish dialog telling them where to change it;
+    # this lab's own file says "es". Applied at startup, before any window is
+    # built, so a change here takes effect on the next run.
+    language: str = i18n.DEFAULT
     source: str = "defaults"
 
     def pathlengths_for(self, serial: str | None) -> dict[str, float] | None:
@@ -120,6 +125,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         "reference_limit_od": cfg.reference_limit_od,
         "blank_spread_limit_au": cfg.blank_spread_limit_au,
         "blank_divergence_limit_au": cfg.blank_divergence_limit_au,
+        "language": cfg.language,
     }
     temp = path.with_suffix(".json.tmp")
     temp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
@@ -189,5 +195,9 @@ def load(path: Path | None = None) -> Config:
                                        quant.BLANK_SPREAD_LIMIT_AU),
         blank_divergence_limit_au=positive("blank_divergence_limit_au",
                                            quant.BLANK_DIVERGENCE_LIMIT_AU),
+        # Anything unrecognised falls back to the default rather than raising:
+        # a typo in a hand-edited file should not stand between somebody and
+        # a plate read.
+        language=i18n.normalise(data.get("language")),
         source=str(path),
     )

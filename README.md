@@ -93,6 +93,31 @@ reduces to `ng/uL = A260 x 1000`.
 The derivation, and two assumptions this project got wrong before the real exports
 arrived, are in `docs/QUANTIFICATION.md`.
 
+## Language
+
+The interface speaks **English by default, and Spanish on request.** Both
+programs share the setting, and so does the spreadsheet they write: with
+Spanish selected the workbook's columns say `Pozo` and `Muestra`, with English
+`Well` and `Sample`.
+
+Three ways to change it, in the order most people will want them:
+
+- **In the program.** epoch-take3: *Preferences...*; epoch-multispectral:
+  the *Language / Idioma...* button. It applies the next time the program
+  starts.
+- **In the configuration:** `"language": "es"` in `epoch_open.json`.
+- **For one run:** `python3 run_take3.py --lang es`, or `EPOCH_LANG=es`.
+
+English is the default only because somebody who has just downloaded this
+cannot read a Spanish dialog telling them where to change it. A lab that works
+in Spanish sets it once. The lab this was written for runs `"language": "es"`.
+
+The English is Gen5's own vocabulary wherever Gen5 names the same thing --
+*Validation limit (CV%)*, *Reference wavelength*, *Standard*, *Known
+concentration*, *Pathlength* -- so anyone who learned the instrument on its
+own software is not made to learn a second set of names, and the two
+spreadsheets line up column by column.
+
 ## Using it with a different instrument
 
 Nothing is compiled in: copy `epoch_open.example.json` to

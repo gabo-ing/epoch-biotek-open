@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 try:
-    from epoch_open import gui
+    from epoch_open import gui, xlsx
     IMPORTED = True
 except ImportError:          # no tkinter on this machine
     gui = None
@@ -109,7 +109,7 @@ class TestResultsTable:
         if app is None:
             return
         try:
-            assert "Unidad" not in gui.TEXT["columns"]
+            assert xlsx.TEXT["unit"] not in gui.TEXT["columns"]
             assert "ng/uL" in app.table.heading("Conc.")["text"]
         finally:
             app.destroy()
@@ -145,7 +145,7 @@ class TestResultsTable:
         if app is None:
             return
         try:
-            assert app.table.column("Aviso", "stretch")
+            assert app.table.column(gui.TEXT["columns"][-1], "stretch")
             assert not app.table.column("Conc.", "stretch")
         finally:
             app.destroy()

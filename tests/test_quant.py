@@ -349,11 +349,37 @@ class TestWarningMessages:
         assert warning.code == "noise_floor"
         assert warning.message
 
-    def test_messages_are_in_spanish(self):
+    def test_the_message_is_in_the_language_in_force(self):
+        """Whichever language is set, the warning comes out in it.
+
+        This replaced a test that asserted the Spanish text directly. The
+        assertion it was really making -- that a warning reaches the user as a
+        sentence rather than as a code -- is the one kept here, and it now
+        holds in either language instead of pinning one.
+        """
+        from epoch_open import i18n, quant
+
         faint = RawWell("A2", {260: 0.046, 280: 0.0455, 320: 0.0405})
-        message = quantify(faint, self.BLANK).warnings[0].message
-        assert "limite de deteccion" in message
-        assert "noise floor" not in message
+        was = i18n.current()
+        try:
+            for code in ("en", "es"):
+                i18n.set_language(code)
+                message = quantify(faint, self.BLANK).warnings[0].message
+                assert message == quant.MESSAGES["noise_floor"]
+                assert "{" not in message, "a placeholder was left unfilled"
+        finally:
+            i18n.set_language(was)
+
+    def test_the_two_languages_say_different_things(self):
+        """A table that was copied rather than translated would pass silently."""
+        from epoch_open.quant import MESSAGES_BY_LANGUAGE
+
+        english = MESSAGES_BY_LANGUAGE["en"]
+        spanish = MESSAGES_BY_LANGUAGE["es"]
+        same = [k for k in spanish if english[k] == spanish[k]]
+        assert not same, f"untranslated: {same}"
+        assert "limit of detection" in english["noise_floor"]
+        assert "limite de deteccion" in spanish["noise_floor"]
 
     def test_every_code_has_a_message_template(self):
         from epoch_open.quant import MESSAGES

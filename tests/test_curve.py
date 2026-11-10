@@ -125,7 +125,7 @@ class TestTheEdgesOfTheCurve:
         fit = curve.fit_standards(CLEAN)
         result = curve.read_against("B1", {530: 1.600}, fit)
         message = str(result.notes[0])
-        assert "diluye" in message.lower()
+        assert "dilu" in message.lower(), "the advice is to dilute"
 
     def test_a_sample_below_the_lowest_standard_is_flagged(self):
         fit = curve.fit_standards(CLEAN)
