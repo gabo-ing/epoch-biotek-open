@@ -75,9 +75,9 @@ _EN_TEXT = {
                        "few seconds: the program finds it by itself."),
     "lost": "THE READER IS NOT ANSWERING - check it is still on.",
 
-    "take3_warning": ("Do NOT use the Take3 plate for this kind of "
-                      "measurement. The plate could be damaged beyond "
-                      "repair. Use clear plastic plates only"),
+    "take3_warning": ("Do NOT use the Take3 plate for these measurements! "
+                      "The plate could be damaged beyond repair. "
+                      "Use clear plastic plates only"),
 
     "plate": "96-well plate",
     "roles": "What I am marking:",
