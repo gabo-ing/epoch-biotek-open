@@ -84,7 +84,7 @@ class TestTheLanguagesAgreeOnWhatTheySay:
             "name_title", "reading", "nothing_to_save", "no_sample_wells",
             "columns", "title", "connected", "wl_cancel", "prefs_cancel",
             "plate_cancel", "curve_field_r2", "no_curve_label",
-            "blank_field_cv", "column_conc",
+            "blank_field_cv", "column_conc", "meta_firmware",
         }
         for name, table in _tables().items():
             copied = [k for k, v in table["es"].items()
@@ -194,7 +194,16 @@ class TestTheWorkbookFollowsTheLanguage:
             i18n.set_language(language)
             folder = tempfile.mkdtemp()
             path = Path(folder) / f"curve-{language}.xlsx"
-            xlsx.export_curve(path, [], fit, [530], unit="ug/mL")
+            # The same footer rows the program itself writes. Exporting
+            # without them is how the first version of this test missed
+            # "Absorbancia del blanco" and "Lector" sitting in the file.
+            from epoch_open import gui_curve
+            xlsx.export_curve(
+                path, [], fit, [530], unit="ug/mL",
+                metadata={
+                    gui_curve.TEXT["meta_blank"]: "530 nm: 0.0406",
+                    gui_curve.TEXT["meta_reader"]: "254717",
+                })
             import zipfile
             with zipfile.ZipFile(path) as z:
                 return "\n".join(
@@ -206,7 +215,9 @@ class TestTheWorkbookFollowsTheLanguage:
     def test_an_english_workbook_has_no_spanish_in_it(self):
         text = self._export("en")
         for word in ("Pozo", "Muestra", "Aviso", "Resumen", "Detalle",
-                     "Pendiente", "Concentracion patron", "UTILIZABLE"):
+                     "Pendiente", "Concentracion patron", "UTILIZABLE",
+                     "Absorbancia del blanco", "Lector", "Leido el",
+                     "Longitudes de onda"):
             assert word not in text, f"{word!r} left in the English workbook"
 
     def test_the_english_workbook_uses_gen5_vocabulary(self):
@@ -221,3 +232,91 @@ class TestTheWorkbookFollowsTheLanguage:
         for word in ("Resumen", "Curva", "Pozo", "Concentracion patron",
                      "Pendiente", "UTILIZABLE"):
             assert word in text, f"{word!r} missing from the Spanish workbook"
+
+
+class TestTheWayAPersonChangesIt:
+    """The controls themselves, which no other test touches.
+
+    A language setting nobody can reach is the same as no language setting,
+    and the multispectral handler in particular runs inside a windowed
+    executable where an exception leaves no trace at all.
+    """
+
+    def _root(self):
+        try:
+            import tkinter as tk
+
+            root = tk.Tk()
+            root.withdraw()
+            return root
+        except Exception:                           # pragma: no cover
+            return None
+
+    def test_the_shared_dialog_returns_a_language_code(self):
+        from epoch_open.ui import LanguageDialog
+
+        root = self._root()
+        if root is None:
+            return
+        try:
+            dialog = LanguageDialog(root, "en", i18n.LANGUAGES)
+            dialog.choice.set(i18n.LANGUAGES["es"])
+            dialog._save()
+            assert dialog.result == "es", (
+                "the dialog shows a language's own name but must return "
+                "its code")
+        finally:
+            root.destroy()
+
+    def test_cancelling_the_dialog_changes_nothing(self):
+        from epoch_open.ui import LanguageDialog
+
+        root = self._root()
+        if root is None:
+            return
+        try:
+            dialog = LanguageDialog(root, "en", i18n.LANGUAGES)
+            dialog.choice.set(i18n.LANGUAGES["es"])
+            dialog.destroy()
+            assert dialog.result is None
+        finally:
+            root.destroy()
+
+    def test_take3_preferences_carry_the_language_out(self):
+        if not GUIS:
+            return
+        root = self._root()
+        if root is None:
+            return
+        try:
+            from epoch_open import config as config_module
+
+            app = gui.App(_fake_reader(), watch=False)
+            try:
+                dialog = gui.PreferencesDialog(app, config_module.Config())
+                dialog.language.set(i18n.LANGUAGES["es"])
+                dialog._save()
+                assert dialog.result is not None, "the dialog refused to save"
+                assert dialog.result["language"] == "es"
+            finally:
+                app.destroy()
+        finally:
+            root.destroy()
+
+    def test_multispectral_has_a_working_way_in(self):
+        """The handler and everything it calls must actually exist.
+
+        It was written against `_say`, which lives on the take3 window; if it
+        were missing here the button would raise where nobody could see it.
+        """
+        if not GUIS:
+            return
+        assert hasattr(gui_curve.App, "_choose_language")
+        assert hasattr(gui_curve.App, "_say")
+        assert gui_curve.TEXT["language_button"]
+
+
+def _fake_reader():
+    from epoch_open.reader import MockReader
+
+    return MockReader()

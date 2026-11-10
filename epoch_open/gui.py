@@ -35,6 +35,18 @@ from .xlsx import export_results
 # Spanish counterpart. The layout was fitted to a 1366x768 laptop one well-lit
 # afternoon and a longer word would quietly undo that.
 _EN_TEXT = {
+    "meta_program": "Program",
+    "meta_plate": "Take3 plate",
+    "meta_pathlength": "Pathlength",
+    "meta_pathlength_sheet": "per well, from the plate's data sheet",
+    "meta_pathlength_nominal": "0.5 mm nominal",
+    "meta_reader": "Reader",
+    "meta_serial": "Serial number",
+    "meta_firmware": "Firmware",
+    "meta_sample_type": "Sample type",
+    "meta_warning": "WARNING",
+    "meta_simulated": "SIMULATED DATA - not real measurements",
+    "file_stem": "quantification",
     "decimal": ".",
     "prefs_lang_group": "Language / Idioma",
     "prefs_lang": "Interface language:",
@@ -51,8 +63,8 @@ _EN_TEXT = {
     "lost": "THE READER IS NOT ANSWERING - check it is still on. Retrying...",
     "no_reader": "Switch the reader on to measure. Looking for it...",
     "no_reader_hint": ("The reader is not connected. Switch it on and wait a "
-                       "few seconds: the program finds it by itself and the "
-                       "read buttons come alive."),
+                       "few seconds: the program detects it automatically and "
+                       "the read buttons become available."),
     "found_now": "Reader found and connected. You can take real readings now.",
     "found_busy_title": "Reader found",
     "found_busy": "A reader has been found, switched on.\n\nThe current batch holds SIMULATED data, which cannot be mixed with real measurements.\n\nDiscard the simulated batch and use the reader?",
@@ -102,8 +114,8 @@ _EN_TEXT = {
     "prefs_defaults": "Factory values",
     "prefs_bad_value": ("{field}: '{value}' is not a valid number. It has to "
                         "be greater than zero."),
-    "prefs_bad_nm": ("Reference wavelength: '{value}' will not do. The Epoch "
-                     "reads between 200 and 999 nm."),
+    "prefs_bad_nm": ("Reference wavelength: '{value}' is not valid. The "
+                     "Epoch reads between 200 and 999 nm."),
     "prefs_saved": "Preferences saved.",
     "path_nominal": ("No pathlength sheet for this plate: the nominal 0.5 mm "
                      "is used, so concentrations may be off by ~2%."),
@@ -146,7 +158,7 @@ _EN_TEXT = {
                          "the plate and blank again."),
     "blank_why_pending": "Some wells are still unread (in blue).",
     "blank_why_empty": "No blank wells are left.",
-    "blank_not_valid": ("The blank is not valid yet. Put it right before "
+    "blank_not_valid": ("The blank is not valid yet. Correct it before "
                         "reading the samples:\n\n{reason}"),
     "blank_invalid_say": "Blank NOT valid. {reason}",
     "blank_done": "Blank read: {wells}",
@@ -183,6 +195,18 @@ _EN_TEXT = {
 }
 
 _ES_TEXT = {
+    "meta_program": "Programa",
+    "meta_plate": "Placa Take3",
+    "meta_pathlength": "Espesor de gota",
+    "meta_pathlength_sheet": "medido pozo a pozo, hoja de la placa",
+    "meta_pathlength_nominal": "0,5 mm nominal",
+    "meta_reader": "Lector",
+    "meta_serial": "Numero de serie",
+    "meta_firmware": "Firmware",
+    "meta_sample_type": "Tipo de muestra",
+    "meta_warning": "AVISO",
+    "meta_simulated": "DATOS SIMULADOS - no son medidas reales",
+    "file_stem": "cuantificacion",
     "decimal": ",",
     "prefs_lang_group": "Idioma / Language",
     "prefs_lang": "Idioma de la interfaz:",
@@ -1295,24 +1319,26 @@ class App(ScreenFit, tk.Tk):
 
         path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
-            initialfile=f"cuantificacion_{datetime.now():%Y%m%d_%H%M}.xlsx",
+            initialfile=(f"{TEXT['file_stem']}_"
+                         f"{datetime.now():%Y%m%d_%H%M}.xlsx"),
             filetypes=[("Excel", "*.xlsx")],
         )
         if not path:
             return
 
         metadata = {
-            "Programa": f"epoch-open {__version__}",
-            "Placa Take3": self.plate_serial,
-            "Espesor de gota": ("medido pozo a pozo, hoja de la placa"
-                                if self.pathlengths else "0,5 mm nominal"),
-            "Lector": self.info.model,
-            "Numero de serie": self.info.serial,
-            "Firmware": self.info.firmware,
-            "Tipo de muestra": self.sample_type.get(),
+            TEXT["meta_program"]: f"epoch-open {__version__}",
+            TEXT["meta_plate"]: self.plate_serial,
+            TEXT["meta_pathlength"]: (TEXT["meta_pathlength_sheet"]
+                                      if self.pathlengths
+                                      else TEXT["meta_pathlength_nominal"]),
+            TEXT["meta_reader"]: self.info.model,
+            TEXT["meta_serial"]: self.info.serial,
+            TEXT["meta_firmware"]: self.info.firmware,
+            TEXT["meta_sample_type"]: self.sample_type.get(),
         }
         if self.simulated:
-            metadata["AVISO"] = "DATOS SIMULADOS - no son medidas reales"
+            metadata[TEXT["meta_warning"]] = TEXT["meta_simulated"]
 
         try:
             export_results(path, self.results,

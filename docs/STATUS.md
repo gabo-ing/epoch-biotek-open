@@ -143,7 +143,8 @@ than the Spanish precisely so that it would.
 - Known capability gaps, all deliberate: a blank on each sample well, the Take3 BioCell
   (A9, H9) and cuvette (E10, E11) positions, the 4-parameter logistic fit ELISA wants,
   and Gen5's extrapolation factor.
-- Cosmetic: the "Leer tambien 230 nm" checkbox is oversized on macOS.
+- Cosmetic: the 230 nm checkbox ("Also read 230 nm" / "Leer tambien 230 nm")
+  is oversized on macOS.
 - **This lab's own machines will come up in English after the upgrade** unless
   `"language": "es"` is set in `epoch_open.json`, or chosen once in
   Preferences. That is the cost of making English the default, and it is paid

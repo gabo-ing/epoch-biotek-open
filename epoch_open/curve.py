@@ -122,14 +122,14 @@ _EN_MESSAGES = {
     ),
     "turbid": (
         "High {reference_nm} nm reference ({reference:.3f}): the well is "
-        "turbid. Spin or filter the supernatant and read again; scattering "
-        "raises the absorbance without any colour being there."
+        "turbid. Centrifuge or filter the supernatant and read again; "
+        "scattering raises the absorbance with no colour present."
     ),
 }
 
 _EN_SHORT_MESSAGES = {
-    "above_range": "Out of curve: dilute and repeat",
-    "below_range": "Below the curve",
+    "above_range": "Out of range: dilute and repeat",
+    "below_range": "Below the curve range",
     "negative": "Negative concentration",
     "turbid": "Turbid well",
 }
@@ -141,17 +141,17 @@ _EN_FIT_MESSAGES = {
     ),
     "thin": (
         "Only {n} standards. The curve holds, but with so few points a "
-        "pipetting error cannot be told from the real slope."
+        "pipetting error cannot be distinguished from the true slope."
     ),
     "outlier": (
-        "Standard {well} ({concentration:g} {unit}) falls off the line "
-        "further than the others. Check its dilution, or drop it and fit "
+        "Standard {well} ({concentration:g} {unit}) deviates from the line "
+        "more than the others. Check its dilution, or exclude it and fit "
         "again."
     ),
     "slope": (
         "The curve falls instead of rising, or is flat. More colour absorbs "
-        "more, so something is the wrong way round: standards swapped, the "
-        "wrong wavelength, or reagent that did not react."
+        "more, so something is inverted: standards swapped, the wrong "
+        "wavelength, or reagent that did not react."
     ),
     "duplicate": (
         "Every standard has the same concentration. At least two different "

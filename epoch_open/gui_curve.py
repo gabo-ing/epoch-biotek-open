@@ -58,6 +58,10 @@ BLANK, STANDARD, SAMPLE = "blanco", "patron", "muestra"
 # happens rather than why -- that is the part that makes somebody put the
 # plate down.
 _EN_TEXT = {
+    "meta_blank": "Blank absorbance",
+    "meta_blank_none": "none",
+    "meta_reader": "Reader",
+    "meta_simulated": "SIMULATED - not real measurements",
     "decimal": ".",
     "language_button": "Language / Idioma...",
     "results": "Results",
@@ -97,7 +101,7 @@ _EN_TEXT = {
     "wl_primary": ("The first one is used for the standard curve. The others "
                    "are measured and recorded, but a curve describes a single "
                    "wavelength."),
-    "wl_bad": ("{value} will not do as a wavelength. The Epoch reads between "
+    "wl_bad": ("{value} is not a valid wavelength. The Epoch reads between "
                "200 and 999 nm, in whole numbers."),
     "wl_repeated": "Wavelength {value} is repeated.",
     "wl_ref_clash": ("The reference ({value} nm) is also one of the measured "
@@ -152,13 +156,13 @@ _EN_TEXT = {
     "no_blank_yet": "The blank has to be read first.",
     "no_curve_yet": "The standards have to be read first.",
     "curve_not_usable": ("This curve cannot be used to measure:\n\n{reason}"
-                         "\n\nPut it right before reading samples."),
+                         "\n\nCorrect it before reading samples."),
     "nothing_to_scan": "Mark a well with colour in it to find the peak.",
     "nothing_to_save": "The batch is empty; there is nothing to save yet.",
     "saved": "Saved to {path}. Batch closed.",
     "save_error": "The file could not be saved:\n\n{error}",
     "read_error": "The read failed:\n\n{error}",
-    "bad_wavelength": ("'{value}' will not do. Type between 1 and {most} "
+    "bad_wavelength": ("'{value}' is not valid. Enter between 1 and {most} "
                        "wavelengths, comma separated, each between 200 and "
                        "999 nm.\nFor example: 490, 530, 590"),
     "too_many_wavelengths": ("That is {count} wavelengths, and the reader "
@@ -194,6 +198,10 @@ _EN_TEXT = {
 }
 
 _ES_TEXT = {
+    "meta_blank": "Absorbancia del blanco",
+    "meta_blank_none": "ninguno",
+    "meta_reader": "Lector",
+    "meta_simulated": "SIMULADO - no son medidas reales",
     "decimal": ",",
     "language_button": "Idioma / Language...",
     "results": "Resultados",
@@ -1386,14 +1394,14 @@ class App(ScreenFit, tk.Tk):
                     # export_curve from the readings themselves. Naming one
                     # here was how a batch read at 490 and then 530 came out
                     # of the file claiming 530 throughout.
-                    "Absorbancia del blanco": ", ".join(
+                    TEXT["meta_blank"]: ", ".join(
                         f"{nm} nm: {value:.4f}"
                         for nm, value in sorted(self.blank_values.items())
-                    ) or "ninguno",
-                    "Lector": ("SIMULADO - no son medidas reales"
-                               if self.simulated else
-                               getattr(self.backend, "info", None)
-                               and self.backend.info.serial),
+                    ) or TEXT["meta_blank_none"],
+                    TEXT["meta_reader"]: (TEXT["meta_simulated"]
+                                          if self.simulated else
+                                          getattr(self.backend, "info", None)
+                                          and self.backend.info.serial),
                 })
         except OSError as exc:
             messagebox.showerror(TEXT["title"],
