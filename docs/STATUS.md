@@ -272,6 +272,16 @@ Two things came out of not being able to answer "which well?":
   discarded wells — written whether the blank passed or not, since a blank accepted on
   a loosened limit is the one somebody will want to see.
 
+A follow-on found the same afternoon, by trying to use the fix: **a refused blank
+could not be saved at all.** Exporting required results, a refused blanking produces
+none by definition, and so the one run whose numbers somebody needs was the only run
+that could not produce a file — the technician was left with a screen she could
+photograph. Saving is now available whenever there is a blank, with or without
+samples. A blank-only save is named `blanco_`/`blank_` rather than
+`cuantificacion_`/`quantification_`, and it **does not close the batch**: she still
+has the same plate in front of her, and pressing save to send somebody the numbers
+must not cost her the blanking it records.
+
 Still open: the config key changed from `blank_spread_limit_au` to
 `blank_dispersion_limit_au`, because the number means something different now and a
 file still carrying `0.004` under the old name would have been read as a very loose
@@ -282,10 +292,10 @@ but the stale key stays in the file until somebody opens Preferences and saves.
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 431 passed as of this commit
+python3 tests/run_tests.py        # 437 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the
-run still reports every test as passed.** A green 431 from a headless machine has not
+run still reports every test as passed.** A green 437 from a headless machine has not
 exercised a single window. `tests/test_gui_starts.py` exists to tell "no display" apart
 from "broken" — run the suite where there is a real display before trusting it.

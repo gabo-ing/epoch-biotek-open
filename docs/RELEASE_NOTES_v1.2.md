@@ -51,6 +51,13 @@ messages used to read "above the limit" and "do not agree with each other" — t
 sentence unless you had read the source — and neither carried a number. Both now give
 the measured value and the limit it passed.
 
+**A blank can be saved on its own.** Saving used to require samples, so a blanking
+that would not pass — the one you most want a record of — could not produce a file at
+all. Press **End batch** with just a blank and you get a workbook of it. The file is
+named `blank_` rather than `quantification_`, and saving it does not close the batch:
+the blanking stays on screen, because sending somebody the numbers should not cost you
+the blank they describe.
+
 **The workbook records the blanking.** Every concentration in the file was computed by
 subtracting a blank, and the file used to say nothing about it. The summary sheet now
 carries the blank wells, the CV% per wavelength, the disagreement between the wells, the
@@ -85,5 +92,5 @@ anything.
 **Never put a Take3 plate in a multispectral read.** It can be damaged irreversibly.
 Use ordinary transparent 96-well plates for those assays.
 
-431 tests pass in both languages. MIT licensed. Protocol notes for anyone writing their
+437 tests pass in both languages. MIT licensed. Protocol notes for anyone writing their
 own driver are in `docs/PROTOCOL.md`.

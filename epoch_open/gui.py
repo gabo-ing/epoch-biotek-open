@@ -58,6 +58,7 @@ _EN_TEXT = {
     "meta_warning": "WARNING",
     "meta_simulated": "SIMULATED DATA - not real measurements",
     "file_stem": "quantification",
+    "file_stem_blank": "blank",
     "decimal": ".",
     "prefs_lang_group": "Language / Idioma",
     "prefs_lang": "Interface language:",
@@ -193,6 +194,8 @@ _EN_TEXT = {
     "done": "Read {read}: {n} samples. Batch total: {total}.",
     "nothing_to_save": "The batch is empty; there is nothing to save yet.",
     "saved": "Saved to {path}. Batch closed.",
+    "saved_blank": ("Blank saved to {path}. The batch stays open: the blank "
+                    "on screen is unchanged."),
     "save_error": "The file could not be saved:\n\n{error}",
     "read_error": "The read failed:\n\n{error}",
     "columns": ("Read:Well", "Conc.", "260/280", "260/230", "Notes"),
@@ -230,6 +233,7 @@ _ES_TEXT = {
     "meta_warning": "AVISO",
     "meta_simulated": "DATOS SIMULADOS - no son medidas reales",
     "file_stem": "cuantificacion",
+    "file_stem_blank": "blanco",
     "decimal": ",",
     "prefs_lang_group": "Idioma / Language",
     "prefs_lang": "Idioma de la interfaz:",
@@ -366,6 +370,8 @@ _ES_TEXT = {
     "done": "Lectura {read}: {n} muestras. Total en el lote: {total}.",
     "nothing_to_save": "El lote esta vacio; todavia no hay nada que guardar.",
     "saved": "Guardado en {path}. Lote cerrado.",
+    "saved_blank": ("Blanco guardado en {path}. El lote sigue abierto: el "
+                    "blanco en pantalla no cambia."),
     "save_error": "No se pudo guardar el archivo:\n\n{error}",
     "read_error": "No se pudo leer:\n\n{error}",
     "columns": ("Lectura:Pozo", "Conc.", "260/280", "260/230", "Aviso"),
@@ -1138,7 +1144,11 @@ class App(ScreenFit, tk.Tk):
             # Not merely "a blank was read": a blank that failed its own
             # checks must not be subtracted from anybody's samples.
             "read_samples": can_read and self._blank_ok(),
-            "end_batch": bool(self.results),
+            # A blank on its own is worth saving. It used to need results,
+            # which meant the one run nobody could get a file out of was a
+            # blank that would not pass -- exactly the run somebody needs to
+            # send to whoever can read it. See _end_batch.
+            "end_batch": bool(self.results) or self.blank_report is not None,
         }
         if not can_read:
             nxt = "end_batch" if self.results else None
@@ -1408,14 +1418,20 @@ class App(ScreenFit, tk.Tk):
             )
 
     def _end_batch(self) -> None:
-        if not self.results:
+        # Samples are the usual reason to save, but not the only one. A
+        # blanking that will not pass produces no results by definition, and
+        # that is precisely the run whose numbers somebody needs: found at the
+        # bench on 18 November 2026, when a refused blank left the technician
+        # with a screen she could photograph and no file she could send.
+        blank_only = not self.results and self.blank_report is not None
+        if not self.results and self.blank_report is None:
             messagebox.showinfo(TEXT["title"], TEXT["nothing_to_save"])
             return
 
+        stem = TEXT["file_stem_blank"] if blank_only else TEXT["file_stem"]
         path = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
-            initialfile=(f"{TEXT['file_stem']}_"
-                         f"{datetime.now():%Y%m%d_%H%M}.xlsx"),
+            initialfile=f"{stem}_{datetime.now():%Y%m%d_%H%M}.xlsx",
             filetypes=[("Excel", "*.xlsx")],
         )
         if not path:
@@ -1441,6 +1457,15 @@ class App(ScreenFit, tk.Tk):
                            sample_names=self.sample_names, metadata=metadata)
         except OSError as exc:
             messagebox.showerror(TEXT["title"], TEXT["save_error"].format(error=exc))
+            return
+
+        if blank_only:
+            # Nothing is closed, because nothing was finished: she still has
+            # the same blank in front of her and still has to decide what to
+            # do about it. Clearing it here would make saving the record cost
+            # her the blanking it records.
+            self._refresh_state()
+            self._say(TEXT["saved_blank"].format(path=Path(path).name))
             return
 
         self.results = []

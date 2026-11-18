@@ -81,8 +81,11 @@ class TestTheNextStepIsObvious:
             _blank(app)
             assert _state(app, "read_samples") == "normal"
             assert app.action_buttons["read_samples"].cget("bg") == gui.ACTION
-            # Nothing has been measured, so there is nothing to save.
-            assert _state(app, "end_batch") == "disabled"
+            # Saving is available but is not the step being pointed at: the
+            # blank alone is worth a file (see App._end_batch), while what she
+            # is meant to press next is still "read samples".
+            assert _state(app, "end_batch") == "normal"
+            assert app.action_buttons["end_batch"].cget("bg") != gui.ACTION
         finally:
             app.destroy()
 

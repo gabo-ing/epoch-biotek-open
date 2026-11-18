@@ -461,3 +461,158 @@ class TestTheWorkbookRecordsTheBlanking:
                     for name in archive.namelist() if name.endswith(".xml"))
         assert gui.TEXT["meta_blank_wells"] in text
         assert gui.TEXT["meta_blank_verdict"] in text
+
+
+class TestARefusedBlankCanStillBeSaved:
+    """Found at the bench on 18 November 2026, by trying to use the last fix.
+
+    The blank record was added to the workbook so that a refused blanking
+    could be looked at afterwards. It could not: saving needed results, a
+    refused blank produces none by definition, and so the one run whose
+    numbers somebody needs was the only run that could not produce a file.
+    The technician was left with a screen she could photograph.
+    """
+
+    def _refused(self, app):
+        """A blanking that fails on disagreement, as hers did."""
+        _blanking(app, {"A2": 0.0, "A3": 0.012, "B2": 0.0, "B3": 0.011})
+        return app.blank_report
+
+    def test_the_save_button_is_live_with_a_blank_and_no_samples(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            report = self._refused(app)
+            assert not report.valid, "this test needs a refused blank"
+            assert app.results == []
+            assert app.action_buttons["end_batch"].cget("state") == "normal"
+        finally:
+            app.destroy()
+
+    def test_the_file_carries_the_numbers_from_the_screen(self):
+        """What she would otherwise have to read off a photograph."""
+        import tempfile
+        import zipfile
+
+        from epoch_open import xlsx
+
+        app = _app()
+        if app is None:
+            return
+        try:
+            report = self._refused(app)
+            meta = app._blank_metadata()
+            dispersion = f"{report.dispersion_au:.5f}".replace(
+                ".", gui.TEXT["decimal"])
+        finally:
+            app.destroy()
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "blank-only.xlsx"
+            xlsx.export_results(path, [], metadata=meta)
+            with zipfile.ZipFile(path) as archive:
+                text = "\n".join(
+                    archive.read(name).decode("utf-8", "replace")
+                    for name in archive.namelist() if name.endswith(".xml"))
+
+        assert gui.TEXT["meta_blank_verdict"] in text
+        assert gui.TEXT["meta_blank_invalid"] in text
+        assert dispersion in text, dispersion
+
+    def test_saving_the_blank_does_not_throw_the_blank_away(self):
+        """Saving the record must not cost her the blanking it records.
+
+        A full batch save closes the batch, which is right once samples have
+        been read and wrong here: she still has the same plate in front of
+        her and still has to decide what to do about it. Pressing save to
+        send somebody the numbers must not make her blank again.
+        """
+        import tempfile
+
+        app = _app()
+        if app is None:
+            return
+        chosen = []
+        original = gui.filedialog.asksaveasfilename
+        folder = tempfile.mkdtemp()
+
+        def fake_dialog(**kwargs):
+            # Also the only place the proposed filename can be inspected.
+            chosen.append(kwargs.get("initialfile", ""))
+            return str(Path(folder) / "blank-only.xlsx")
+
+        try:
+            self._refused(app)
+            wells_before = app.blank_report.wells
+            gui.filedialog.asksaveasfilename = fake_dialog
+            app._end_batch()
+
+            assert Path(folder, "blank-only.xlsx").exists(), "no file written"
+            assert chosen and chosen[0].startswith(
+                gui.TEXT["file_stem_blank"]), chosen
+            # The blanking survives the save, untouched.
+            assert app.blank_raw is not None
+            assert app.blank_report is not None
+            assert app.blank_report.wells == wells_before
+        finally:
+            gui.filedialog.asksaveasfilename = original
+            app.destroy()
+
+    def test_a_full_batch_still_closes_when_it_is_saved(self):
+        """The ordinary path must keep its old behaviour."""
+        import tempfile
+
+        app = _app()
+        if app is None:
+            return
+        original = gui.filedialog.asksaveasfilename
+        folder = tempfile.mkdtemp()
+        try:
+            _blanking(app, {"A2": 0.0, "A3": 0.0005})
+            app._read_samples_into_results() if hasattr(
+                app, "_read_samples_into_results") else None
+            if not app.results:
+                # Read a sample the ordinary way so this exercises the real
+                # path rather than a hand-built results list.
+                app.sample_selected.clear()
+                app.sample_selected.add("B2")
+                app._read_samples()
+            if not app.results:
+                return
+            gui.filedialog.asksaveasfilename = (
+                lambda **kw: str(Path(folder) / "full.xlsx"))
+            app._end_batch()
+            assert Path(folder, "full.xlsx").exists()
+            assert app.results == [], "a finished batch should close"
+            assert app.blank_raw is None
+        finally:
+            gui.filedialog.asksaveasfilename = original
+            app.destroy()
+
+    def test_an_empty_screen_still_has_nothing_to_save(self):
+        """The guard has to keep rejecting the genuinely empty case."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            assert app.results == []
+            assert app.blank_report is None
+            assert app.action_buttons["end_batch"].cget("state") == "disabled"
+        finally:
+            app.destroy()
+
+    def test_the_blank_only_file_is_named_so_it_is_not_mistaken_for_results(self):
+        if not IMPORTED:
+            return
+        from epoch_open import i18n
+
+        was = i18n.current()
+        try:
+            for language in ("en", "es"):
+                i18n.set_language(language)
+                assert gui.TEXT["file_stem_blank"] != gui.TEXT["file_stem"]
+                assert gui.TEXT["saved_blank"] != gui.TEXT["saved"]
+                assert "{path}" in gui.TEXT["saved_blank"]
+        finally:
+            i18n.set_language(was)
