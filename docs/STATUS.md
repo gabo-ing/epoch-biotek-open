@@ -303,6 +303,13 @@ retired rule. On a four-well blanking split two and two, all four went red, whic
 her nothing. Both the chooser and `wells_to_discard` now respect both limits, and the
 smudged pair alone is reddened again.
 
+**And a valid blank with red wells said nothing.** Asked at the bench the same day:
+*"if red but valid, can it be used?"* It can — that is the whole point of letting a red
+well stop blocking the read — but the screen showed VALID in green, painted two wells
+red, and printed nothing connecting the two, so the question was the screen's fault.
+A valid blanking with wells reddened now says so and names them: *Blanco VALIDO: ya
+puedes leer muestras. A2, A3 son los que mas se alejan del resto.*
+
 Still open: the config key changed from `blank_spread_limit_au` to
 `blank_dispersion_limit_au`, because the number means something different now and a
 file still carrying `0.004` under the old name would have been read as a very loose
@@ -313,10 +320,10 @@ but the stale key stays in the file until somebody opens Preferences and saves.
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 444 passed as of this commit
+python3 tests/run_tests.py        # 449 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the
-run still reports every test as passed.** A green 444 from a headless machine has not
+run still reports every test as passed.** A green 449 from a headless machine has not
 exercised a single window. `tests/test_gui_starts.py` exists to tell "no display" apart
 from "broken" — run the suite where there is a real display before trusting it.

@@ -616,3 +616,106 @@ class TestARefusedBlankCanStillBeSaved:
                 assert "{path}" in gui.TEXT["saved_blank"]
         finally:
             i18n.set_language(was)
+
+
+class TestAValidBlankWithRedWellsSaysSo:
+    """Asked at the bench on 18 November 2026: "if red but valid, can it be
+    used?"
+
+    It can, and that is the whole point of the change that let a red well
+    stop blocking the read. But the screen said VALID in green, painted two
+    wells red, and printed nothing at all connecting the two, so the question
+    was the screen's fault rather than hers.
+
+    The eight wells below are the real ones from that blanking, read off the
+    Blank sheet of blank_20261118_1327.xlsx: CV 3,825%, valid, with A2 and A3
+    sitting 0,0034 and 0,0040 AU from the median against a 0,003 limit.
+    """
+
+    HERS = {
+        "A2": (0.0696, 0.0586, 0.0462),
+        "A3": (0.0726, 0.0617, 0.0498),
+        "B2": (0.0654, 0.0536, 0.0410),
+        "B3": (0.0647, 0.0521, 0.0385),
+        "C2": (0.0684, 0.0554, 0.0410),
+        "C3": (0.0686, 0.0555, 0.0411),
+        "D2": (0.0694, 0.0556, 0.0412),
+        "D3": (0.0709, 0.0564, 0.0414),
+    }
+
+    def _load(self, app):
+        app.blank_raw = {
+            name: RawWell(well=name,
+                          readings={260: v[0], 280: v[1], 320: v[2]})
+            for name, v in self.HERS.items()}
+        app.blank_selected.clear()
+        app.blank_selected.update(self.HERS)
+        app._refresh_state()
+
+    def test_her_blanking_is_valid_with_two_wells_red(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._load(app)
+            assert app.blank_report.valid
+            assert app.blank_report.divergent == ("A2", "A3")
+            assert f"{app.blank_report.cv_260:.3f}".startswith("3.82")
+        finally:
+            app.destroy()
+
+    def test_she_can_read_samples(self):
+        """The question she actually asked."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._load(app)
+            assert app._blank_ok()
+            assert app.action_buttons["read_samples"].cget("state") == "normal"
+        finally:
+            app.destroy()
+
+    def test_the_screen_says_so_in_words_and_names_the_wells(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._load(app)
+            shown = app.blank_label.cget("text")
+            assert shown, "a valid blank with red wells said nothing at all"
+            assert "A2" in shown and "A3" in shown, shown
+            # Not coloured as a failure: the blank passed.
+            assert app.blank_label.cget("style") == "Good.TLabel"
+        finally:
+            app.destroy()
+
+    def test_a_clean_blank_still_just_lists_its_wells(self):
+        """The new sentence must not appear when nothing is red."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.0, "A3": 0.0004, "B2": 0.0002})
+            assert app.blank_report.valid
+            assert app.blank_report.divergent == ()
+            shown = app.blank_label.cget("text")
+            assert shown == gui.TEXT["blank_done"].format(
+                wells=", ".join(sorted(app.blank)))
+        finally:
+            app.destroy()
+
+    def test_both_languages_have_the_sentence_and_its_placeholder(self):
+        if not IMPORTED:
+            return
+        from epoch_open import i18n
+
+        was = i18n.current()
+        try:
+            for language in ("en", "es"):
+                i18n.set_language(language)
+                text = gui.TEXT["blank_ok_but_divergent"]
+                assert "{wells}" in text
+                assert text != gui.TEXT["blank_done"]
+        finally:
+            i18n.set_language(was)

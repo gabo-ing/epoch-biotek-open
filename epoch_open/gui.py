@@ -173,6 +173,10 @@ _EN_TEXT = {
                              "a standard deviation of {sd:.4f} AU between "
                              "them, above the limit of {limit:.4f}. Clean the "
                              "plate and blank again."),
+    "blank_ok_but_divergent": ("Blank VALID -- you can read samples. {wells} "
+                               "sit furthest from the rest (in red): wipe "
+                               "those spots if you want a tighter blank, or "
+                               "carry on."),
     "blank_why_pending": "Some wells are still unread (in blue).",
     "blank_why_empty": "No blank wells are left.",
     "blank_not_valid": ("The blank is not valid yet. Correct it before "
@@ -349,6 +353,10 @@ _ES_TEXT = {
                              "desviacion estandar de {sd:.4f} AU entre ellos, "
                              "por encima del limite de {limit:.4f}. Limpia la "
                              "placa y vuelve a blanquear."),
+    "blank_ok_but_divergent": ("Blanco VALIDO: ya puedes leer muestras. "
+                               "{wells} son los que mas se alejan del resto "
+                               "(en rojo): limpia esos puntos si quieres un "
+                               "blanco mas ajustado, o sigue adelante."),
     "blank_why_pending": "Faltan pozos por leer (en azul).",
     "blank_why_empty": "No queda ningun pozo de blanco.",
     "blank_not_valid": ("El blanco no es valido todavia. Arreglalo antes de leer "
@@ -1011,10 +1019,25 @@ class App(ScreenFit, tk.Tk):
         self.blank_fields["cv"].configure(text=text)
 
         if ok:
-            self.blank_label.configure(
-                text=TEXT["blank_done"].format(
-                    wells=", ".join(sorted(self.blank or {}))),
-                style="Good.TLabel")
+            # A good blank that still has a well or two painted red needs to
+            # say so in words. The colour means "this spot sits furthest out,
+            # wipe it if you like", and the status beside it already says
+            # VALID -- but nothing on the screen connected the two, and the
+            # first technician to meet it asked whether a red well could be
+            # used at all. It can. Asked at the bench, 18 November 2026.
+            if self.blank_report and self.blank_report.divergent:
+                self.blank_label.configure(
+                    text=TEXT["blank_ok_but_divergent"].format(
+                        wells=", ".join(self.blank_report.divergent)),
+                    # Good, not Bad: the blank passed. Red paint on a well
+                    # is advice about a spot, and colouring the sentence as
+                    # a failure would contradict the VALID beside it.
+                    style="Good.TLabel")
+            else:
+                self.blank_label.configure(
+                    text=TEXT["blank_done"].format(
+                        wells=", ".join(sorted(self.blank or {}))),
+                    style="Good.TLabel")
         else:
             self.blank_label.configure(text=self._blank_reason(),
                                        style="Bad.TLabel")

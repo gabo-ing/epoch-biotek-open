@@ -46,6 +46,11 @@ a spot 0.003 AU out moves what gets subtracted by 0.0001 AU, which is nothing at
 0.5 mm. Naming the well was useful; refusing the whole run over it was not. A genuinely
 bad plate is still refused, at any number of wells.
 
+**A valid blank with a red well says so.** Red means "this spot sits furthest from
+the others, wipe it if you like" — it does not stop you reading. The screen used to
+show VALID and paint a well red without connecting the two, which is a fair way to
+confuse anybody. It now says it in words and names the wells.
+
 **The screen now says which check stopped you, and by how much.** The two refusal
 messages used to read "above the limit" and "do not agree with each other" — the same
 sentence unless you had read the source — and neither carried a number. Both now give
@@ -98,5 +103,5 @@ anything.
 **Never put a Take3 plate in a multispectral read.** It can be damaged irreversibly.
 Use ordinary transparent 96-well plates for those assays.
 
-444 tests pass in both languages. MIT licensed. Protocol notes for anyone writing their
+449 tests pass in both languages. MIT licensed. Protocol notes for anyone writing their
 own driver are in `docs/PROTOCOL.md`.
