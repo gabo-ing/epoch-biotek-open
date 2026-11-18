@@ -23,7 +23,7 @@ from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
                     REFERENCE_NM, blank_for, blank_report, quantify, unit_for,
                     wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
-from .xlsx import export_results
+from .xlsx import blank_to_rows, export_results
 
 # The English, in Gen5's vocabulary wherever Gen5 names the same thing:
 # "Validation limit (CV%)", "Reference wavelength", "Take3 Pathlength Data
@@ -1452,9 +1452,23 @@ class App(ScreenFit, tk.Tk):
         if self.simulated:
             metadata[TEXT["meta_warning"]] = TEXT["meta_simulated"]
 
+        # The blanking goes in as its own sheet, well by well. The footer
+        # rows say how well they agreed; only this says which well read what,
+        # which is the difference between a drop that evaporated and one that
+        # never bridged the gap.
+        blank_rows = None
+        if self.blank_raw:
+            blank_rows = blank_to_rows(
+                self.blank_raw,
+                cv_percent=(self.blank_report.cv_percent
+                            if self.blank_report else None),
+                used=set(self.blank_report.wells) if self.blank_report
+                else None)
+
         try:
             export_results(path, self.results,
-                           sample_names=self.sample_names, metadata=metadata)
+                           sample_names=self.sample_names, metadata=metadata,
+                           blank_rows=blank_rows)
         except OSError as exc:
             messagebox.showerror(TEXT["title"], TEXT["save_error"].format(error=exc))
             return

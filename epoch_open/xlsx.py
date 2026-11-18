@@ -218,6 +218,16 @@ def write_workbook(path: str | Path, sheets: list[tuple]) -> Path:
 _EN_TEXT = {
     "sheet_summary": "Summary",
     "sheet_detail": "Detail",
+    # Gen5's own name for this table, and its own column names below, so the
+    # two programs' blank records can be read side by side.
+    "sheet_blank": "Blank",
+    "blank_location": "Location",
+    "blank_raw": "{nm} Raw",
+    "blank_average": "[AVE]",
+    "blank_cv": "CV (%)",
+    "blank_used": "Used",
+    "blank_used_yes": "yes",
+    "blank_used_no": "discarded",
     "sheet_curve": "Curve",
 
     "summary_headers": ["Sample", "Well", "Read", "Conc.", "Unit",
@@ -260,6 +270,14 @@ _EN_TEXT = {
 _ES_TEXT = {
     "sheet_summary": "Resumen",
     "sheet_detail": "Detalle",
+    "sheet_blank": "Blanco",
+    "blank_location": "Pozo",
+    "blank_raw": "{nm} bruto",
+    "blank_average": "[PROM]",
+    "blank_cv": "CV (%)",
+    "blank_used": "Usado",
+    "blank_used_yes": "si",
+    "blank_used_no": "descartado",
     "sheet_curve": "Curva",
 
     "summary_headers": ["Muestra", "Pozo", "Lectura", "Conc.", "Unidad",
@@ -350,6 +368,63 @@ def results_to_rows(results, sample_names: dict | None = None) -> list[list]:
 
 SUMMARY_WIDTHS = [26, 8, 9, 11, 9, 10, 10, 50]
 
+BLANK_WIDTHS = [10, 11, 11, 11, 11, 12]
+
+
+def blank_to_rows(blanks, cv_percent=None, used=None) -> list[list]:
+    """The blanking itself, well by well: Gen5's "Blank Results" table.
+
+    Written because the aggregate was not enough. The workbook gained the
+    blank's CV%, its disagreement and its verdict on 18 November 2026, and
+    within the afternoon a blanking failed in a way none of those three could
+    explain -- two of four wells reddened, and no way to tell from the file
+    whether they had read high or low. High and low have different causes: a
+    drop that evaporated leaves its salts behind and reads high, one that
+    never bridged the 0.5 mm gap reads low. The per-well numbers separate
+    them; nothing else does.
+
+    Gen5 prints this table and its column names are kept, so the two programs'
+    blank records can be read side by side.
+
+    `used` is the wells that went into the average. A well she discarded is
+    still listed -- what was discarded is part of the record -- and marked.
+    """
+    wavelengths = sorted({nm for well in blanks.values()
+                          for nm in well.readings})
+    header = [TEXT["blank_location"]]
+    header += [TEXT["blank_raw"].format(nm=nm) for nm in wavelengths]
+    header.append(TEXT["blank_used"])
+    rows = [header]
+
+    for name in sorted(blanks):
+        readings = blanks[name].readings
+        row = [name]
+        row += [round(readings[nm], 4) if nm in readings else ""
+                for nm in wavelengths]
+        row.append(TEXT["blank_used_yes"] if used is None or name in used
+                   else TEXT["blank_used_no"])
+        rows.append(row)
+
+    counted = [w for w in sorted(blanks) if used is None or w in used]
+    if counted:
+        averages = [TEXT["blank_average"]]
+        for nm in wavelengths:
+            values = [blanks[w].readings[nm] for w in counted
+                      if nm in blanks[w].readings]
+            averages.append(round(sum(values) / len(values), 4)
+                            if values else "")
+        averages.append("")
+        rows.append(averages)
+
+    if cv_percent:
+        cv_row = [TEXT["blank_cv"]]
+        cv_row += [round(cv_percent[nm], 2) if nm in cv_percent else ""
+                   for nm in wavelengths]
+        cv_row.append("")
+        rows.append(cv_row)
+
+    return rows
+
 
 def results_to_summary(results, sample_names: dict | None = None) -> list[list]:
     """The sheet meant for people: one line per sample, named.
@@ -383,8 +458,15 @@ def results_to_summary(results, sample_names: dict | None = None) -> list[list]:
     return rows
 
 
-def export_results(path, results, sample_names=None, metadata: dict | None = None) -> Path:
-    """Write both sheets: the named summary first, the per-well detail second."""
+def export_results(path, results, sample_names=None, metadata: dict | None = None,
+                   blank_rows: list[list] | None = None) -> Path:
+    """Write the sheets: named summary, per-well detail, and the blanking.
+
+    `blank_rows` comes from `blank_to_rows`. It is the whole content of a
+    blank-only save -- a blanking that will not pass produces no results by
+    definition -- and on an ordinary run it is the record of what was
+    subtracted from every sample in the file.
+    """
     summary = results_to_summary(results, sample_names)
 
     summary.append([])
@@ -395,13 +477,14 @@ def export_results(path, results, sample_names=None, metadata: dict | None = Non
 
     detail = results_to_rows(results, sample_names)
 
-    return write_workbook(
-        path,
-        [
-            (TEXT["sheet_summary"], summary, SUMMARY_WIDTHS),
-            (TEXT["sheet_detail"], detail, WIDTHS),
-        ],
-    )
+    sheets = [
+        (TEXT["sheet_summary"], summary, SUMMARY_WIDTHS),
+        (TEXT["sheet_detail"], detail, WIDTHS),
+    ]
+    if blank_rows:
+        sheets.append((TEXT["sheet_blank"], blank_rows, BLANK_WIDTHS))
+
+    return write_workbook(path, sheets)
 
 
 # ---------------------------------------------------------------------------

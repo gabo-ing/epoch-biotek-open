@@ -85,6 +85,9 @@ class TestTheLanguagesAgreeOnWhatTheySay:
             "columns", "title", "connected", "wl_cancel", "prefs_cancel",
             "plate_cancel", "curve_field_r2", "no_curve_label",
             "blank_field_cv", "column_conc", "meta_firmware",
+            # "CV (%)" is Gen5's own column heading on its Blank Results
+            # table, and Gen5 prints it that way in Spanish too.
+            "blank_cv",
         }
         for name, table in _tables().items():
             copied = [k for k, v in table["es"].items()

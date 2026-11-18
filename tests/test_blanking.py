@@ -411,3 +411,98 @@ class TestTheVerdictDoesNotDependOnHowManyWellsWereBlanked:
             report = blank_report(blanks)
             assert not report.valid, count
             assert report.reason == "dispersion", (count, report.reason)
+
+
+class TestTheRedWellsStillMeanDiscardThese:
+    """A regression caught on 18 November 2026, reading a saved blank back.
+
+    `wells_to_discard` replaced a distance-from-the-median rule because the
+    median rule reddens every well on two clean spots and two smudged ones --
+    the case Gabo photographed on 3 November 2026. Making the disagreement
+    limit a gate of its own quietly handed the red paint back to the old
+    rule, because the test that chose between them only asked whether the
+    CV% had failed.
+    """
+
+    def two_clean_two_smudged(self):
+        """Row A high, as an evaporated drop reads; row B clean."""
+        table = {}
+        for name, offset in (("A2", 0.009), ("A3", 0.008),
+                             ("B2", 0.0), ("B3", 0.0004)):
+            table[name] = (0.046 + offset, 0.044 + offset, 0.041)
+        return wells(table)
+
+    def test_only_the_smudged_pair_is_reddened(self):
+        report = blank_report(self.two_clean_two_smudged())
+        assert not report.valid
+        assert report.reason == "dispersion", report.reason
+        assert report.divergent == ("A2", "A3"), report.divergent
+
+    def test_discarding_what_is_red_leaves_a_blank_that_passes(self):
+        """The whole promise of the colour, for this gate as for the CV%."""
+        blanks = self.two_clean_two_smudged()
+        report = blank_report(blanks)
+        kept = {w: b for w, b in blanks.items() if w not in report.divergent}
+        assert len(kept) >= 2
+        assert blank_report(kept).valid
+
+    def test_it_holds_when_the_disagreement_is_the_only_thing_failing(self):
+        """Belt and braces: the CV% here is inside its limit throughout."""
+        blanks = self.two_clean_two_smudged()
+        report = blank_report(blanks)
+        assert max(report.cv_percent.values()) <= 10.0, report.cv_percent
+
+
+class TestTheBlankSheet:
+    """The blanking well by well, which no aggregate can stand in for.
+
+    Two wells reddened and no way to tell from the file whether they read
+    high or low is what prompted this. High and low have different causes: a
+    drop that evaporated leaves its salts and reads high, one that never
+    bridged the 0.5 mm gap reads low.
+    """
+
+    def rows(self, used=None):
+        from epoch_open import xlsx
+
+        blanks = wells({"A2": (0.055, 0.053, 0.041),
+                        "A3": (0.054, 0.052, 0.041),
+                        "B2": (0.046, 0.044, 0.041)})
+        report = blank_report(blanks)
+        return xlsx.blank_to_rows(blanks, cv_percent=report.cv_percent,
+                                  used=used), blanks
+
+    def test_every_well_gets_a_row_with_every_wavelength(self):
+        rows, blanks = self.rows()
+        located = [r[0] for r in rows]
+        for name in blanks:
+            assert name in located, name
+        header = rows[0]
+        assert len(header) == 1 + 3 + 1, header     # well + 3 nm + used
+
+    def test_the_raw_absorbances_are_the_ones_that_were_read(self):
+        rows, blanks = self.rows()
+        by_name = {r[0]: r for r in rows}
+        assert by_name["A2"][1] == 0.055
+        assert by_name["B2"][1] == 0.046
+
+    def test_it_carries_the_average_and_the_cv_like_gen5_does(self):
+        from epoch_open import xlsx
+
+        rows, _ = self.rows()
+        labels = [r[0] for r in rows]
+        assert xlsx.TEXT["blank_average"] in labels
+        assert xlsx.TEXT["blank_cv"] in labels
+
+    def test_a_discarded_well_is_listed_and_marked_not_averaged(self):
+        """What was thrown away is part of the record, not absent from it."""
+        from epoch_open import xlsx
+
+        rows, _ = self.rows(used={"A2", "A3"})
+        by_name = {r[0]: r for r in rows}
+        assert "B2" in by_name, "a discarded well must still appear"
+        assert by_name["B2"][-1] == xlsx.TEXT["blank_used_no"]
+        assert by_name["A2"][-1] == xlsx.TEXT["blank_used_yes"]
+        # The average must be of the two kept wells, not all three.
+        average = by_name[xlsx.TEXT["blank_average"]][1]
+        assert abs(average - (0.055 + 0.054) / 2) < 1e-9, average

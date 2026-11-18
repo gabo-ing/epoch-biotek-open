@@ -619,6 +619,7 @@ class BlankReport:
 def wells_to_discard(
     blanks: dict[str, RawWell],
     cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
+    dispersion_limit_au: float = BLANK_DISPERSION_LIMIT_AU,
 ) -> set[str]:
     """Which wells would have to go for the rest to agree.
 
@@ -629,9 +630,15 @@ def wells_to_discard(
     passes?
 
     Found by dropping the well furthest from the mean, over and over, until
-    the CV% of what remains is inside the limit. Never below two wells, since
-    a single well has no CV% and discarding down to one would trade a bad
-    blank for an unjudgeable one.
+    what remains is inside **both** limits. Never below two wells, since a
+    single well has no CV% and discarding down to one would trade a bad blank
+    for an unjudgeable one.
+
+    Both limits, because either can refuse a blanking on its own. Checking
+    only the CV% here was right while the CV% was the only thing that could
+    fail a blank whose wells were individually plausible; once the
+    disagreement limit became a gate of its own it left a hole, and the hole
+    landed on the very case described below.
 
     The naive rule this replaced measured each well's distance from the
     median, which breaks on exactly the case Gabo photographed on
@@ -652,10 +659,16 @@ def wells_to_discard(
     kept = dict(blanks)
     discarded: set[str] = set()
 
+    def passes(wells):
+        cv = {w: blank_cv_percent(wells, w)
+              for w in set.intersection(*(set(b.readings)
+                                          for b in wells.values()))}
+        if cv and max(cv.values()) > cv_limit_percent:
+            return False
+        return blank_dispersion(wells) <= dispersion_limit_au
+
     while len(kept) > 2:
-        cv = {w: blank_cv_percent(kept, w)
-              for w in set.intersection(*(set(b.readings) for b in kept.values()))}
-        if cv and max(cv.values()) <= cv_limit_percent:
+        if passes(kept):
             return discarded
 
         values = {name: well.corrected(260) for name, well in kept.items()}
@@ -665,9 +678,7 @@ def wells_to_discard(
         del kept[worst]
 
     # Down to two wells and still failing: nothing to single out.
-    cv = {w: blank_cv_percent(kept, w)
-          for w in set.intersection(*(set(b.readings) for b in kept.values()))}
-    if cv and max(cv.values()) <= cv_limit_percent:
+    if passes(kept):
         return discarded
     return set()
 
@@ -712,9 +723,17 @@ def blank_report(
     # When the CV% already passes there is nothing to discard, so the older
     # distance-from-the-median rule is left to name a well that is visibly out
     # of line anyway -- advice on a blanking that is otherwise fine.
-    failing = bool(cv) and max(cv.values()) > cv_limit_percent
+    # "Failing" has to mean every way a blanking can be refused, not only the
+    # CV%. When the disagreement limit became a gate of its own it was left
+    # out of this test, which quietly handed the red paint back to the
+    # distance-from-the-median rule -- the rule that reddens all four wells on
+    # two clean spots and two smudged ones, which is the case it was retired
+    # for. Caught on 18 November 2026 while reading a saved blank back.
+    failing = (bool(cv) and max(cv.values()) > cv_limit_percent) \
+        or dispersion > dispersion_limit_au
     if failing:
-        divergent = wells_to_discard(blanks, cv_limit_percent)
+        divergent = wells_to_discard(blanks, cv_limit_percent,
+                                     dispersion_limit_au)
     else:
         divergent = divergent_blank_wells(blanks, divergence_limit_au)
 

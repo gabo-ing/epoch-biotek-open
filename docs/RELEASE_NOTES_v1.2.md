@@ -65,6 +65,12 @@ verdict, and any wells you discarded — written whether the blank passed or not
 a blank accepted on a loosened limit is the one somebody will want to see six months
 later.
 
+**The workbook has a Blank sheet.** Every blank well's raw absorbance at every
+wavelength, then the average and the CV% — Gen5's own table, with Gen5's own column
+names. The aggregate tells you the wells disagreed; this tells you which one read what,
+which is the difference between a drop that evaporated and one that never bridged the
+gap. Wells you discarded are listed and marked rather than dropped from the record.
+
 ### If you are upgrading
 
 **One settings key was renamed.** `blank_spread_limit_au` became
@@ -92,5 +98,5 @@ anything.
 **Never put a Take3 plate in a multispectral read.** It can be damaged irreversibly.
 Use ordinary transparent 96-well plates for those assays.
 
-437 tests pass in both languages. MIT licensed. Protocol notes for anyone writing their
+444 tests pass in both languages. MIT licensed. Protocol notes for anyone writing their
 own driver are in `docs/PROTOCOL.md`.

@@ -282,6 +282,27 @@ samples. A blank-only save is named `blanco_`/`blank_` rather than
 has the same plate in front of her, and pressing save to send somebody the numbers
 must not cost her the blanking it records.
 
+Two more came out of the same afternoon.
+
+**The saved blank had no per-well numbers in it.** The footer gave the CV%, the
+disagreement and the verdict, and then a blanking failed in a way none of the three
+could explain — two of four wells reddened, with no way to tell from the file whether
+they had read high or low. The difference matters: a drop that evaporated leaves its
+salts behind and reads high, one that never bridged the 0.5 mm gap reads low. The
+workbook now has a third sheet, **Blanco / Blank**, carrying every blank well's raw
+absorbance at every wavelength, then `[PROM]`/`[AVE]` and `CV (%)` — Gen5's own table,
+with Gen5's own column names, so the two can be read side by side. A well she discarded
+is still listed and marked, because what was thrown away is part of the record.
+
+**The red wells had stopped meaning "discard these".** `wells_to_discard` replaced a
+distance-from-the-median rule precisely because the median rule reddens every well on
+two clean spots and two smudged ones — the case photographed on 3 November 2026. The
+test choosing between the two rules asked only whether the *CV%* had failed, so making
+the disagreement limit a gate of its own quietly handed the red paint back to the
+retired rule. On a four-well blanking split two and two, all four went red, which tells
+her nothing. Both the chooser and `wells_to_discard` now respect both limits, and the
+smudged pair alone is reddened again.
+
 Still open: the config key changed from `blank_spread_limit_au` to
 `blank_dispersion_limit_au`, because the number means something different now and a
 file still carrying `0.004` under the old name would have been read as a very loose
@@ -292,10 +313,10 @@ but the stale key stays in the file until somebody opens Preferences and saves.
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 437 passed as of this commit
+python3 tests/run_tests.py        # 444 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the
-run still reports every test as passed.** A green 437 from a headless machine has not
+run still reports every test as passed.** A green 444 from a headless machine has not
 exercised a single window. `tests/test_gui_starts.py` exists to tell "no display" apart
 from "broken" — run the suite where there is a real display before trusting it.
