@@ -27,11 +27,18 @@ Three consequences, in order of how much they cost us:
    property of Gen5. Whatever the experiment measured would have been that
    laptop's configuration.
 
-2. **Our criterion is a different kind of thing.** `BLANK_SPREAD_LIMIT_AU` and
-   `BLANK_DIVERGENCE_LIMIT_AU` are absolute, in absorbance units. Gen5's is
+2. **Our criterion is a different kind of thing.** `BLANK_DISPERSION_LIMIT_AU`
+   and `BLANK_DIVERGENCE_LIMIT_AU` are absolute, in absorbance units. Gen5's is
    relative, a coefficient of variation. They disagree in opposite directions
    at the two ends of the range: on a very clean blank a CV% limit is
    stricter than ours, and on a blank with a high background it is looser.
+
+   `BLANK_DISPERSION_LIMIT_AU` was a highest-to-lowest range until 18 November
+   2026, which made it a third kind of thing again: a statistic that grows with
+   the number of wells, judged against a limit that does not. It is now a
+   standard deviation, so like Gen5's CV% it means the same whether two wells
+   were blanked or all of them. See `blank_dispersion()` for the whole story,
+   which starts with a technician who blanks every well before using it.
 
 3. **We already compute the right number and only display it.**
    `blank_cv_percent()` in `epoch_open/quant.py` computes CV% per wavelength

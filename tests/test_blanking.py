@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from epoch_open import quant
 from epoch_open.quant import (                          # noqa: E402
     BLANK_DIVERGENCE_LIMIT_AU,
-    BLANK_SPREAD_LIMIT_AU,
+    BLANK_DISPERSION_LIMIT_AU,
     RawWell,
     blank_report,
     divergent_blank_wells,
@@ -68,14 +68,15 @@ class TestAgainstTheOneRealRun:
     def test_a_blank_gen5_passed_keeps_room_under_both_limits(self):
         """The thresholds have to clear real good blanks, not just scrape past.
 
-        This run spans 0,002 AU, half the spread limit, and its worst well sits
-        0,0015 AU from the median against a 0,003 divergence limit. Those two
-        margins are what the defaults were set from; if a change here makes this
-        test tight, the change will be reddening wells at the bench on blanks
-        the instrument's own software was happy with.
+        These wells disagree by a standard deviation of 0,00089 AU against a
+        0,0025 limit, and the worst of them sits 0,0015 AU from the median
+        against a 0,003 divergence limit. Those two margins are what the
+        defaults were set from; if a change here makes this test tight, the
+        change will be reddening wells at the bench on blanks the instrument's
+        own software was happy with.
         """
         report = blank_report(wells(GEN5_VALID_RUN))
-        assert report.spread_au <= BLANK_SPREAD_LIMIT_AU / 2 + 1e-9
+        assert report.dispersion_au <= BLANK_DISPERSION_LIMIT_AU / 2 + 1e-9
         assert divergent_blank_wells(wells(GEN5_VALID_RUN),
                                      BLANK_DIVERGENCE_LIMIT_AU * 0.8) == set()
 
@@ -192,25 +193,26 @@ class TestTheTwoLimitsTogether:
         assert report.divergent == ("A2",)
         assert report.reason != "divergent"
 
-    def test_two_wells_that_merely_disagree_fail_on_spread_with_nothing_red(self):
+    def test_two_wells_that_merely_disagree_fail_on_dispersion_with_nothing_red(self):
         """Neither well is far enough from the median to be blamed.
 
         The median of two sits between them, so each is 0,0025 from it, inside
-        the 0,003 divergence limit -- while the pair spans 0,005, past the 0,004
-        spread limit. Nothing is painted red because there is nothing to
-        discard: the only honest instruction is to blank again.
+        the 0,003 divergence limit -- while the pair disagrees by 0,005 AU, a
+        standard deviation of 0,0035, past the 0,0025 disagreement limit.
+        Nothing is painted red because there is nothing to discard: the only
+        honest instruction is to blank again.
         """
         blanks = flat(["A2", "B2"], delta_260=0.005)
         report = blank_report(blanks)
         assert not report.valid
-        assert report.reason == "spread"
+        assert report.reason == "dispersion"
         assert report.divergent == ()
 
     def test_the_limits_can_be_loosened_until_the_blank_passes(self):
         """All three are arguments, so a lab can move them without a rebuild."""
         blanks = flat(["A2", "B2", "C2"], delta_260=0.010)
         report = blank_report(blanks, cv_limit_percent=99.0,
-                              spread_limit_au=0.050,
+                              dispersion_limit_au=0.050,
                               divergence_limit_au=0.050)
         assert report.valid
 
@@ -218,10 +220,10 @@ class TestTheTwoLimitsTogether:
         """Tightening only the CV% limit must be enough to fail a blanking."""
         blanks = flat(["A2", "B2", "C2"], delta_260=0.010)
         loose = blank_report(blanks, cv_limit_percent=99.0,
-                             spread_limit_au=0.050,
+                             dispersion_limit_au=0.050,
                              divergence_limit_au=0.050)
         tight = blank_report(blanks, cv_limit_percent=0.5,
-                             spread_limit_au=0.050,
+                             dispersion_limit_au=0.050,
                              divergence_limit_au=0.050)
         assert loose.valid
         assert not tight.valid
@@ -299,3 +301,113 @@ class TestTheBlankingGen5Rejected:
         report = blank_report(blanks)
         assert report.valid
         assert report.divergent == ()
+
+
+# The names of every Take3 microspot, in the order the grid shows them.
+ALL_SPOTS = [f"{row}{column}" for column in (2, 3) for row in "ABCDEFGH"]
+
+
+def like_the_real_plate(count):
+    """`count` blank wells of exactly the quality Gen5 accepted.
+
+    Built by cycling the eight real wells of Gen5_LVA_NAQ_0001, so the per-well
+    disagreement is the same at any size: this is what one plate of that
+    quality looks like whether two spots were blanked or forty-eight. It is the
+    control for every claim below about the number of wells not mattering.
+    """
+    real = list(GEN5_VALID_RUN.values())
+    names = [f"{row}{column}" for column in (2, 3, 4, 5, 6, 7)
+             for row in "ABCDEFGH"][:count]
+    return wells({name: real[index % len(real)]
+                  for index, name in enumerate(names)})
+
+
+class TestTheVerdictDoesNotDependOnHowManyWellsWereBlanked:
+    """The bug this class exists for, found at the bench on 18 November 2026.
+
+    A technician blanks every well before using it -- all sixteen spots, not
+    the two or eight these thresholds were set from -- and was refused over and
+    over, with a different well painted red each time. A different well every
+    time is the signature: a dirty spot would be the same spot twice.
+
+    The cause was that the absolute floor under the CV% was a range,
+    `max - min`, judged against a fixed limit. A range grows with the number of
+    wells however good the blanking is, so the gate tightened as she blanked
+    more carefully, while the error a blank actually injects -- the error of the
+    mean -- was shrinking as 1/sqrt(n) the whole time. See `blank_dispersion`.
+    """
+
+    def test_a_plate_gen5_would_accept_passes_at_every_size(self):
+        for count in (2, 3, 4, 6, 8, 12, 16, 24, 48):
+            report = blank_report(like_the_real_plate(count))
+            assert report.valid, (count, report.reason,
+                                  report.dispersion_au)
+
+    def test_the_whole_plate_passes(self):
+        """The exact thing she was doing, at the size she was doing it."""
+        report = blank_report(like_the_real_plate(len(ALL_SPOTS)))
+        assert report.valid
+        assert report.reason == ""
+
+    def test_the_measured_disagreement_does_not_drift_with_the_count(self):
+        """A standard deviation estimates the same quantity at any n.
+
+        The old range did not: it climbed from about 2.85 standard deviations
+        at eight wells to 3.90 at twenty-four, purely from counting.
+        """
+        values = [blank_report(like_the_real_plate(n)).dispersion_au
+                  for n in (8, 16, 24, 48)]
+        assert max(values) - min(values) < 0.0002, values
+
+    def test_the_old_range_rule_would_have_refused_the_whole_plate(self):
+        """Why this is a regression test and not a preference.
+
+        Kept as the arithmetic rather than the old code: on these wells the
+        highest-to-lowest range passes the retired 0.004 AU limit at eight
+        wells and fails it well before forty-eight, with nothing about the
+        plate having changed.
+        """
+        def old_range(blanks):
+            deltas = [b.corrected(260) for b in blanks.values()]
+            return max(deltas) - min(deltas)
+
+        spread_at_8 = old_range(like_the_real_plate(8))
+        assert spread_at_8 <= 0.004
+        # The range cannot shrink when wells are added, only grow.
+        for count in (16, 24, 48):
+            assert old_range(like_the_real_plate(count)) >= spread_at_8
+
+    def test_one_bad_drop_among_many_is_named_but_no_longer_blocks_the_read(self):
+        """Twenty-four drops means one of them will be short sooner or later.
+
+        That well contributes a twenty-fourth of the blank, so it moves what
+        gets subtracted by about 0.0001 AU -- nothing at 0.5 mm. It is still
+        painted red so the spot can be wiped or dropped; refusing the whole
+        read over it was the part that was wrong.
+        """
+        blanks = like_the_real_plate(24)
+        victim = sorted(blanks)[7]
+        raw = blanks[victim].readings
+        blanks[victim] = RawWell(well=victim,
+                                 readings={260: raw[260] + 0.004,
+                                           280: raw[280], 320: raw[320]})
+        report = blank_report(blanks)
+        assert victim in report.divergent, "the bad spot must still be named"
+        assert report.valid, "but it must not stop her reading samples"
+
+    def test_a_genuinely_bad_plate_still_fails_at_every_size(self):
+        """Scale-free has to cut both ways, or it is just a loosening."""
+        for count in (2, 4, 8, 16, 24):
+            names = [f"{row}{column}" for column in (2, 3, 4)
+                     for row in "ABCDEFGH"][:count]
+            blanks = {}
+            for index, name in enumerate(names):
+                # Alternating 0,005 AU apart: a plate half of whose spots are
+                # dirty, which is 5 ng/uL of dsDNA between them at 0,5 mm.
+                offset = 0.005 if index % 2 else 0.0
+                blanks[name] = RawWell(
+                    well=name,
+                    readings={260: 0.046 + offset, 280: 0.044, 320: 0.041})
+            report = blank_report(blanks)
+            assert not report.valid, count
+            assert report.reason == "dispersion", (count, report.reason)

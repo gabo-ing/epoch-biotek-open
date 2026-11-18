@@ -179,46 +179,46 @@ class TestBlankLimits:
         from epoch_open import quant
 
         cfg = config.Config()
-        assert cfg.blank_spread_limit_au == quant.BLANK_SPREAD_LIMIT_AU
+        assert cfg.blank_dispersion_limit_au == quant.BLANK_DISPERSION_LIMIT_AU
         assert cfg.blank_divergence_limit_au == quant.BLANK_DIVERGENCE_LIMIT_AU
 
     def test_a_lab_can_loosen_them_in_the_file(self):
         p = self.path("limits.json")
-        p.write_text(json.dumps({"blank_spread_limit_au": 0.010,
+        p.write_text(json.dumps({"blank_dispersion_limit_au": 0.010,
                                  "blank_divergence_limit_au": 0.008}))
         cfg = config.load(p)
-        assert cfg.blank_spread_limit_au == 0.010
+        assert cfg.blank_dispersion_limit_au == 0.010
         assert cfg.blank_divergence_limit_au == 0.008
 
     def test_they_survive_a_save(self):
         """Registering a plate must not quietly reset them to the defaults."""
         p = self.path("limits-roundtrip.json")
-        p.write_text(json.dumps({"blank_spread_limit_au": 0.010,
+        p.write_text(json.dumps({"blank_dispersion_limit_au": 0.010,
                                  "blank_divergence_limit_au": 0.008}))
         cfg = config.load(p)
         cfg.set_plate("243819", {"A2": 0.5})
         config.save(cfg, p)
 
         reloaded = config.load(p)
-        assert reloaded.blank_spread_limit_au == 0.010
+        assert reloaded.blank_dispersion_limit_au == 0.010
         assert reloaded.blank_divergence_limit_au == 0.008
 
     def test_a_limit_of_zero_is_ignored_rather_than_obeyed(self):
         """Zero would reject every blank ever read, including perfect ones."""
         p = self.path("zero.json")
-        p.write_text(json.dumps({"blank_spread_limit_au": 0,
+        p.write_text(json.dumps({"blank_dispersion_limit_au": 0,
                                  "blank_divergence_limit_au": -1}))
         cfg = config.load(p)
-        assert cfg.blank_spread_limit_au > 0
+        assert cfg.blank_dispersion_limit_au > 0
         assert cfg.blank_divergence_limit_au > 0
 
     def test_rubbish_falls_back_instead_of_stopping_the_program(self):
         p = self.path("rubbish.json")
-        p.write_text(json.dumps({"blank_spread_limit_au": "mucho"}))
+        p.write_text(json.dumps({"blank_dispersion_limit_au": "mucho"}))
         from epoch_open import quant
 
-        assert config.load(p).blank_spread_limit_au \
-            == quant.BLANK_SPREAD_LIMIT_AU
+        assert config.load(p).blank_dispersion_limit_au \
+            == quant.BLANK_DISPERSION_LIMIT_AU
 
     def test_the_example_file_matches_the_built_in_defaults(self):
         """A shipped example that disagrees with the code teaches a wrong number."""
@@ -226,6 +226,6 @@ class TestBlankLimits:
 
         root = Path(__file__).resolve().parent.parent
         example = json.loads((root / "epoch_open.example.json").read_text())
-        assert example["blank_spread_limit_au"] == quant.BLANK_SPREAD_LIMIT_AU
+        assert example["blank_dispersion_limit_au"] == quant.BLANK_DISPERSION_LIMIT_AU
         assert example["blank_divergence_limit_au"] \
             == quant.BLANK_DIVERGENCE_LIMIT_AU

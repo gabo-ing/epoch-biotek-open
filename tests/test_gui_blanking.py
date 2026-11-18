@@ -253,7 +253,16 @@ class TestTheStatusBlock:
             return
         try:
             _blanking(app, {"A2": 0.010, "B2": 0.0, "C2": 0.0})
-            assert app.blank_label.cget("text") == gui.TEXT["blank_why_cv"]
+            # The message carries the measured CV% and the limit it passed, so
+            # it cannot be compared against the bare template any more. Which
+            # of the two limits stopped her used to be unknowable from the
+            # screen -- see App._why_cv.
+            shown = app.blank_label.cget("text")
+            assert shown == app._why_cv()
+            limit = f"{gui.CONFIG.blank_cv_limit_percent:.1f}".replace(
+                ".", gui.TEXT["decimal"])
+            assert limit in shown, (limit, shown)
+            assert "260" in shown
 
             _blanking(app, {"A2": 0.0})
             assert app.blank_label.cget("text") == gui.TEXT["blank_why_single"]
@@ -292,3 +301,163 @@ class TestResetBlanks:
                 == "disabled"
         finally:
             app.destroy()
+
+
+class TestTheScreenSaysWhichLimitStoppedHer:
+    """Added 18 November 2026, from a question that could not be answered.
+
+    A technician reported being refused repeatedly, and could not say which of
+    the two checks had done it -- reasonably, because the CV% message said
+    "above the limit" and the disagreement message said "do not agree with each
+    other", which are the same sentence to anybody who has not read the source.
+    Neither carried a number. Both now carry the measured value and the limit.
+    """
+
+    def test_the_cv_message_carries_the_measured_cv_and_the_limit(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.010, "B2": 0.0, "C2": 0.0})
+            shown = app.blank_label.cget("text")
+            assert app.blank_report.reason == "cv"
+            measured = f"{app.blank_report.cv_260:.1f}".replace(
+                ".", gui.TEXT["decimal"])
+            assert measured in shown, (measured, shown)
+            assert "260" in shown
+        finally:
+            app.destroy()
+
+    def test_the_disagreement_message_carries_the_sd_and_the_limit(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            # Two wells 0,005 AU apart: neither can be blamed, and the CV% is
+            # fine, so this is the one message only this gate produces.
+            _blanking(app, {"A2": 0.005, "B2": 0.0})
+            assert app.blank_report.reason == "dispersion"
+            shown = app.blank_label.cget("text")
+            limit = f"{gui.CONFIG.blank_dispersion_limit_au:.4f}".replace(
+                ".", gui.TEXT["decimal"])
+            assert limit in shown, (limit, shown)
+        finally:
+            app.destroy()
+
+    def test_the_two_messages_are_not_the_same_sentence(self):
+        """The defect itself: they used to be indistinguishable."""
+        if not IMPORTED:
+            return
+        from epoch_open import i18n
+
+        was = i18n.current()
+        try:
+            for language in ("en", "es"):
+                i18n.set_language(language)
+                assert (gui.TEXT["blank_why_cv"]
+                        != gui.TEXT["blank_why_dispersion"])
+                assert "{cv" in gui.TEXT["blank_why_cv"]
+                assert "{limit" in gui.TEXT["blank_why_cv"]
+                assert "{sd" in gui.TEXT["blank_why_dispersion"]
+                assert "{limit" in gui.TEXT["blank_why_dispersion"]
+        finally:
+            i18n.set_language(was)
+
+    def test_a_spanish_sentence_keeps_its_full_stop(self):
+        """The decimal mark must reach the numbers and nothing else.
+
+        Swapping every "." in the finished sentence -- the obvious way to do
+        this -- turns the full stop at the end of a Spanish one into a comma.
+        See gui._Decimal.
+        """
+        if not IMPORTED:
+            return
+        from epoch_open import i18n
+
+        was = i18n.current()
+        try:
+            i18n.set_language("es")
+            rendered = gui.TEXT["blank_why_dispersion"].format(
+                sd=gui._Decimal(0.0035), limit=gui._Decimal(0.0025))
+            assert "0,0035" in rendered
+            assert "0,0025" in rendered
+            assert rendered.rstrip().endswith(".")
+        finally:
+            i18n.set_language(was)
+
+
+class TestTheWorkbookRecordsTheBlanking:
+    """Every concentration in the file was computed by subtracting this blank.
+
+    The file recorded nothing about it until 18 November 2026: not which wells
+    it came from, not how well they agreed, not whether any had been dropped.
+    That gap is why a bench report of repeated refusals had to be diagnosed
+    from Gen5's own exports instead of from the lab's own files.
+    """
+
+    def test_it_names_the_wells_the_cv_and_the_verdict(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.0, "A3": 0.0005, "B2": 0.0})
+            meta = app._blank_metadata()
+            assert meta[gui.TEXT["meta_blank_wells"]] == "A2, A3, B2"
+            assert "260" in meta[gui.TEXT["meta_blank_cv"]]
+            assert meta[gui.TEXT["meta_blank_dispersion"]]
+            assert (meta[gui.TEXT["meta_blank_verdict"]]
+                    == gui.TEXT["meta_blank_valid"])
+        finally:
+            app.destroy()
+
+    def test_a_refused_blank_is_recorded_as_refused(self):
+        """The blank somebody will most want to see afterwards."""
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.010, "B2": 0.0, "C2": 0.0})
+            meta = app._blank_metadata()
+            assert (meta[gui.TEXT["meta_blank_verdict"]]
+                    == gui.TEXT["meta_blank_invalid"])
+        finally:
+            app.destroy()
+
+    def test_discarded_wells_are_named_so_the_average_can_be_checked(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.0, "A3": 0.0, "B2": 0.0})
+            app.blank_selected.discard("B2")
+            app._refresh_state()
+            meta = app._blank_metadata()
+            assert meta[gui.TEXT["meta_blank_wells"]] == "A2, A3"
+            assert meta[gui.TEXT["meta_blank_discarded"]] == "B2"
+        finally:
+            app.destroy()
+
+    def test_the_rows_reach_the_spreadsheet(self):
+        import tempfile
+        import zipfile
+
+        from epoch_open import xlsx
+
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.0, "A3": 0.0005})
+            meta = app._blank_metadata()
+        finally:
+            app.destroy()
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "blank.xlsx"
+            xlsx.export_results(path, [], metadata=meta)
+            with zipfile.ZipFile(path) as archive:
+                text = "\n".join(
+                    archive.read(name).decode("utf-8", "replace")
+                    for name in archive.namelist() if name.endswith(".xml"))
+        assert gui.TEXT["meta_blank_wells"] in text
+        assert gui.TEXT["meta_blank_verdict"] in text

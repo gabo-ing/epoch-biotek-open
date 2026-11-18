@@ -19,7 +19,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__, config, i18n, launch, take3
 from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
-                    BLANK_SPREAD_LIMIT_AU, HIGH_REFERENCE_MARGIN, QuantError,
+                    BLANK_DISPERSION_LIMIT_AU, HIGH_REFERENCE_MARGIN, QuantError,
                     REFERENCE_NM, blank_for, blank_report, quantify, unit_for,
                     wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
@@ -44,6 +44,17 @@ _EN_TEXT = {
     "meta_serial": "Serial number",
     "meta_firmware": "Firmware",
     "meta_sample_type": "Sample type",
+    # The blanking, recorded in the file that leaves the lab. Until now the
+    # workbook said nothing about it, so a result could not be audited against
+    # the blank it was computed from -- and when a technician reported being
+    # refused, there was no record of what the program had measured.
+    "meta_blank_wells": "Blank wells",
+    "meta_blank_cv": "Blank CV% (raw)",
+    "meta_blank_dispersion": "Blank well disagreement (SD, OD)",
+    "meta_blank_verdict": "Blank status",
+    "meta_blank_discarded": "Blank wells discarded",
+    "meta_blank_valid": "valid",
+    "meta_blank_invalid": "NOT VALID",
     "meta_warning": "WARNING",
     "meta_simulated": "SIMULATED DATA - not real measurements",
     "file_stem": "quantification",
@@ -102,11 +113,13 @@ _EN_TEXT = {
                        "by more than this limit, the row is marked amber. "
                        "Gen5 uses 0.1."),
     "prefs_extra_group": "Settings particular to this program",
-    "prefs_spread": "Maximum spread (OD):",
+    "prefs_dispersion": "Maximum disagreement (SD, OD):",
     "prefs_divergence": "Diverging well (OD):",
-    "prefs_extra_help": ("Gen5 has neither of these. The spread is a floor "
-                         "beneath the CV%, which is a ratio and so measures "
-                         "no absolute size. The divergence limit only decides "
+    "prefs_extra_help": ("Gen5 has neither of these. The disagreement limit "
+                         "is a floor beneath the CV%, which is a ratio and so "
+                         "measures no absolute size; it is a standard "
+                         "deviation, so it does not change with the number of "
+                         "wells blanked. The divergence limit only decides "
                          "which well is painted red; it does not block the "
                          "read."),
     "prefs_save": "OK",
@@ -148,14 +161,17 @@ _EN_TEXT = {
     "blank_why_divergent": ("Some blank wells do not agree with the rest "
                             "(in red). Discard them, or clean everything and "
                             "blank again."),
-    "blank_why_cv": ("The blank wells vary too much among themselves (CV% "
-                     "above the limit). Clean the plate, load the water again "
-                     "and repeat the blank."),
+    "blank_why_cv": ("The blank wells vary too much among themselves: CV% is "
+                     "{cv:.1f} at {nm} nm, above the limit of {limit:.1f}. "
+                     "Clean the plate, load the water again and repeat the "
+                     "blank."),
     "blank_why_single": ("A CV% cannot be computed from a single well, so "
                          "there is no way to tell whether the blank is good. "
                          "Mark at least two wells and repeat the blank."),
-    "blank_why_spread": ("The blank wells do not agree with each other. Clean "
-                         "the plate and blank again."),
+    "blank_why_dispersion": ("The blank wells do not agree with each other: "
+                             "a standard deviation of {sd:.4f} AU between "
+                             "them, above the limit of {limit:.4f}. Clean the "
+                             "plate and blank again."),
     "blank_why_pending": "Some wells are still unread (in blue).",
     "blank_why_empty": "No blank wells are left.",
     "blank_not_valid": ("The blank is not valid yet. Correct it before "
@@ -204,6 +220,13 @@ _ES_TEXT = {
     "meta_serial": "Numero de serie",
     "meta_firmware": "Firmware",
     "meta_sample_type": "Tipo de muestra",
+    "meta_blank_wells": "Pozos del blanco",
+    "meta_blank_cv": "CV% del blanco (bruto)",
+    "meta_blank_dispersion": "Discrepancia entre pozos (DE, DO)",
+    "meta_blank_verdict": "Estado del blanco",
+    "meta_blank_discarded": "Pozos de blanco descartados",
+    "meta_blank_valid": "valido",
+    "meta_blank_invalid": "NO VALIDO",
     "meta_warning": "AVISO",
     "meta_simulated": "DATOS SIMULADOS - no son medidas reales",
     "file_stem": "cuantificacion",
@@ -263,12 +286,14 @@ _ES_TEXT = {
                        "mas que este limite, la fila se marca en ambar. Gen5 "
                        "usa 0,1."),
     "prefs_extra_group": "Ajustes propios de este programa",
-    "prefs_spread": "Dispersion maxima (DO):",
+    "prefs_dispersion": "Discrepancia maxima (DE, DO):",
     "prefs_divergence": "Pozo divergente (DO):",
-    "prefs_extra_help": ("Gen5 no tiene estos dos. La dispersion es un suelo "
-                         "por debajo del CV%, que es una razon y no mide "
-                         "tamanos absolutos. El de divergencia solo decide que "
-                         "pozo se pinta en rojo; no bloquea la lectura."),
+    "prefs_extra_help": ("Gen5 no tiene estos dos. El limite de discrepancia "
+                         "es un suelo por debajo del CV%, que es una razon y "
+                         "no mide tamanos absolutos; es una desviacion "
+                         "estandar, asi que no cambia con la cantidad de pozos "
+                         "blanqueados. El de divergencia solo decide que pozo "
+                         "se pinta en rojo; no bloquea la lectura."),
     "prefs_save": "Aceptar",
     "prefs_cancel": "Cancelar",
     "prefs_defaults": "Valores de fabrica",
@@ -309,14 +334,17 @@ _ES_TEXT = {
     "blank_why_divergent": ("Hay pozos de blanco que no concuerdan con el resto "
                             "(en rojo). Descartalos, o limpia todo y vuelve a "
                             "blanquear."),
-    "blank_why_cv": ("Los pozos del blanco varian demasiado entre si "
-                     "(CV% por encima del limite). Limpia la placa, vuelve a "
-                     "cargar el agua y repite el blanco."),
+    "blank_why_cv": ("Los pozos del blanco varian demasiado entre si: el CV% "
+                     "es {cv:.1f} a {nm} nm, por encima del limite de "
+                     "{limit:.1f}. Limpia la placa, vuelve a cargar el agua y "
+                     "repite el blanco."),
     "blank_why_single": ("Con un solo pozo no se puede calcular el CV%, asi que "
                          "no hay forma de saber si el blanco es bueno. Marca al "
                          "menos dos pozos y repite el blanco."),
-    "blank_why_spread": ("Los pozos del blanco no concuerdan entre si. Limpia la "
-                         "placa y vuelve a blanquear."),
+    "blank_why_dispersion": ("Los pozos del blanco no concuerdan entre si: "
+                             "desviacion estandar de {sd:.4f} AU entre ellos, "
+                             "por encima del limite de {limit:.4f}. Limpia la "
+                             "placa y vuelve a blanquear."),
     "blank_why_pending": "Faltan pozos por leer (en azul).",
     "blank_why_empty": "No queda ningun pozo de blanco.",
     "blank_not_valid": ("El blanco no es valido todavia. Arreglalo antes de leer "
@@ -360,6 +388,19 @@ _ES_TEXT = {
 TEXT_BY_LANGUAGE = {"en": _EN_TEXT, "es": _ES_TEXT}
 
 TEXT = i18n.register({}, TEXT_BY_LANGUAGE)
+
+
+class _Decimal(float):
+    """A number that writes itself with the language's decimal mark.
+
+    These numbers go inside translated sentences, so the format spec has to
+    stay in the sentence ("{sd:.4f} AU") and the comma has to reach the number
+    and nothing else. Swapping every "." in the finished sentence would turn
+    the full stop at the end of a Spanish one into a comma.
+    """
+
+    def __format__(self, spec: str) -> str:
+        return format(float(self), spec).replace(".", TEXT["decimal"])
 
 SAMPLE_TYPES = ("dsDNA", "ssDNA", "RNA", "protein")
 
@@ -827,7 +868,7 @@ class App(ScreenFit, tk.Tk):
         self.blank_report = blank_report(
             kept,
             CONFIG.blank_cv_limit_percent,
-            CONFIG.blank_spread_limit_au,
+            CONFIG.blank_dispersion_limit_au,
             CONFIG.blank_divergence_limit_au,
         ) if kept else None
 
@@ -845,12 +886,66 @@ class App(ScreenFit, tk.Tk):
         if self.blank_report is None:
             return TEXT["blank_why_empty"]
         return {
-            "cv": TEXT["blank_why_cv"],
+            "cv": self._why_cv(),
             "single": TEXT["blank_why_single"],
             "divergent": TEXT["blank_why_divergent"],
-            "spread": TEXT["blank_why_spread"],
+            "dispersion": self._why_dispersion(),
             "empty": TEXT["blank_why_empty"],
         }.get(self.blank_report.reason, "")
+
+    def _why_cv(self) -> str:
+        """The CV% message, naming the wavelength and both numbers.
+
+        Which limit was exceeded used to be left to her to guess: the CV%
+        message said "above the limit" and the disagreement one said "do not
+        agree with each other", which are the same sentence to anybody who has
+        not read the source. When a technician could not say which of the two
+        she had been hitting, there was no way to tell from the screen either.
+        Both now carry the measured value and the limit it passed.
+        """
+        cv = self.blank_report.cv_percent
+        nm = max(cv, key=cv.get) if cv else REFERENCE_NM
+        return TEXT["blank_why_cv"].format(
+            cv=_Decimal(cv.get(nm, 0.0)), nm=nm,
+            limit=_Decimal(CONFIG.blank_cv_limit_percent))
+
+    def _why_dispersion(self) -> str:
+        """The disagreement message, with the standard deviation and the limit."""
+        return TEXT["blank_why_dispersion"].format(
+            sd=_Decimal(self.blank_report.dispersion_au),
+            limit=_Decimal(CONFIG.blank_dispersion_limit_au))
+
+    def _blank_metadata(self) -> dict:
+        """The blanking, for the footer of the workbook.
+
+        Every concentration in the file was computed by subtracting this blank,
+        and until now the file recorded nothing about it: not which wells it
+        came from, not how well they agreed, not whether any had been dropped.
+        Six months later there was no way to check a result against its own
+        blank, and no way to answer "why was it refused?" after the fact.
+
+        Written whether the blank passed or not. A blank that was accepted on a
+        loosened limit is exactly the one somebody will want to see.
+        """
+        report = self.blank_report
+        if report is None:
+            return {}
+
+        cv = ", ".join(f"{nm}: {_Decimal(value):.2f}"
+                       for nm, value in sorted(report.cv_percent.items()))
+        meta = {
+            TEXT["meta_blank_wells"]: ", ".join(report.wells),
+            TEXT["meta_blank_cv"]: cv,
+            TEXT["meta_blank_dispersion"]:
+                f"{_Decimal(report.dispersion_au):.5f}",
+            TEXT["meta_blank_verdict"]: (TEXT["meta_blank_valid"]
+                                         if report.valid
+                                         else TEXT["meta_blank_invalid"]),
+        }
+        dropped = sorted(set(self.blank_raw or {}) - set(report.wells))
+        if dropped:
+            meta[TEXT["meta_blank_discarded"]] = ", ".join(dropped)
+        return meta
 
     def _blank_well_style(self, name: str):
         """How one well of the blank grid should look: (bg, fg, outline, hover)."""
@@ -960,7 +1055,7 @@ class App(ScreenFit, tk.Tk):
 
         CONFIG.blank_cv_limit_percent = dialog.result["cv"]
         CONFIG.reference_limit_od = dialog.result["ref_limit"]
-        CONFIG.blank_spread_limit_au = dialog.result["spread"]
+        CONFIG.blank_dispersion_limit_au = dialog.result["dispersion"]
         CONFIG.blank_divergence_limit_au = dialog.result["divergence"]
         # Stored, not applied live: every widget on screen already copied its
         # text. Saying so is the whole of the behaviour here.
@@ -1337,6 +1432,7 @@ class App(ScreenFit, tk.Tk):
             TEXT["meta_firmware"]: self.info.firmware,
             TEXT["meta_sample_type"]: self.sample_type.get(),
         }
+        metadata.update(self._blank_metadata())
         if self.simulated:
             metadata[TEXT["meta_warning"]] = TEXT["meta_simulated"]
 
@@ -1426,8 +1522,8 @@ class PreferencesDialog(tk.Toplevel):
         extra = ttk.LabelFrame(body, text=TEXT["prefs_extra_group"], padding=10,
                                style="Card.TLabelframe")
         extra.pack(fill="x", pady=(0, 12))
-        self._row(extra, "spread", TEXT["prefs_spread"],
-                  config.blank_spread_limit_au)
+        self._row(extra, "dispersion", TEXT["prefs_dispersion"],
+                  config.blank_dispersion_limit_au)
         self._row(extra, "divergence", TEXT["prefs_divergence"],
                   config.blank_divergence_limit_au)
         ttk.Label(extra, text=TEXT["prefs_extra_help"],
@@ -1481,7 +1577,7 @@ class PreferencesDialog(tk.Toplevel):
         for key, value in (("cv", BLANK_CV_LIMIT_PERCENT),
                            ("ref_nm", REFERENCE_NM),
                            ("ref_limit", HIGH_REFERENCE_MARGIN),
-                           ("spread", BLANK_SPREAD_LIMIT_AU),
+                           ("dispersion", BLANK_DISPERSION_LIMIT_AU),
                            ("divergence", BLANK_DIVERGENCE_LIMIT_AU)):
             self.fields[key].set(str(value).replace(".", TEXT["decimal"]))
 
@@ -1505,7 +1601,7 @@ class PreferencesDialog(tk.Toplevel):
         values = {}
         for key, label in (("cv", TEXT["prefs_cv"]),
                            ("ref_limit", TEXT["prefs_ref_limit"]),
-                           ("spread", TEXT["prefs_spread"]),
+                           ("dispersion", TEXT["prefs_dispersion"]),
                            ("divergence", TEXT["prefs_divergence"])):
             value = self._number(key, label)
             if value is None:

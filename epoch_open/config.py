@@ -11,7 +11,7 @@ executable, and every field is optional.
         "243819": {"A2": 0.5125, "A3": 0.5096},
         "999001": {"A2": 0.5044, "A3": 0.5071}
       },
-      "blank_spread_limit_au": 0.004,
+      "blank_dispersion_limit_au": 0.0025,
       "blank_divergence_limit_au": 0.002
     }
 
@@ -21,14 +21,17 @@ reader_serial   null (the default) accepts whichever Epoch answers. Set it only
 plate_serial    which Take3 is in use now.
 plates          every plate the lab has registered, keyed by serial, each with
                 the values from its own Take3 Pathlength Data Sheet.
-blank_spread_limit_au
-                how far apart the blank wells may read, in absorbance units,
-                before the blanking is called invalid and the samples cannot be
-                read. Default 0.004.
+blank_dispersion_limit_au
+                how far the blank wells may disagree with each other, as a
+                standard deviation in absorbance units, before the blanking is
+                called invalid and the samples cannot be read. Default 0.0025.
+                It replaced blank_spread_limit_au, which was a highest-to-lowest
+                range and so tightened as more wells were blanked; a file still
+                carrying the old key falls back to this default.
 blank_divergence_limit_au
                 how far one blank well may sit from the middle of the others
-                before it is painted red as the one to wipe. Default half the
-                spread limit.
+                before it is painted red as the one to wipe. It does not block
+                the read.
 
 Those two limits are this project's own, not numbers recovered from Gen5: we have
 no export of a blanking run Gen5 rejected, so there was nothing to measure them
@@ -68,7 +71,7 @@ class Config:
     plates: dict[str, dict[str, float]] = field(default_factory=dict)
     blank_cv_limit_percent: float = quant.BLANK_CV_LIMIT_PERCENT
     reference_limit_od: float = quant.HIGH_REFERENCE_MARGIN
-    blank_spread_limit_au: float = quant.BLANK_SPREAD_LIMIT_AU
+    blank_dispersion_limit_au: float = quant.BLANK_DISPERSION_LIMIT_AU
     blank_divergence_limit_au: float = quant.BLANK_DIVERGENCE_LIMIT_AU
     # Which language the interface speaks. English by default, because a
     # stranger cannot read a Spanish dialog telling them where to change it;
@@ -123,7 +126,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         },
         "blank_cv_limit_percent": cfg.blank_cv_limit_percent,
         "reference_limit_od": cfg.reference_limit_od,
-        "blank_spread_limit_au": cfg.blank_spread_limit_au,
+        "blank_dispersion_limit_au": cfg.blank_dispersion_limit_au,
         "blank_divergence_limit_au": cfg.blank_divergence_limit_au,
         "language": cfg.language,
     }
@@ -191,8 +194,8 @@ def load(path: Path | None = None) -> Config:
             "blank_cv_limit_percent", quant.BLANK_CV_LIMIT_PERCENT),
         reference_limit_od=positive(
             "reference_limit_od", quant.HIGH_REFERENCE_MARGIN),
-        blank_spread_limit_au=positive("blank_spread_limit_au",
-                                       quant.BLANK_SPREAD_LIMIT_AU),
+        blank_dispersion_limit_au=positive("blank_dispersion_limit_au",
+                                           quant.BLANK_DISPERSION_LIMIT_AU),
         blank_divergence_limit_au=positive("blank_divergence_limit_au",
                                            quant.BLANK_DIVERGENCE_LIMIT_AU),
         # Anything unrecognised falls back to the default rather than raising:

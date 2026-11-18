@@ -120,9 +120,9 @@ _EN_MESSAGES = {
         "Usually the blank well was dirty, or the drop did not bridge both "
         "surfaces."
     ),
-    "blank_spread": (
-        "The blank wells do not agree with each other: {spread:.4f} AU "
-        "between the highest and the lowest ({cv:.1f}% at 260 nm). Clean the "
+    "blank_dispersion": (
+        "The blank wells do not agree with each other: a standard deviation of "
+        "{sd:.4f} AU between them ({cv:.1f}% at 260 nm). Clean the "
         "plate, load the water again and repeat the blank before reading "
         "samples: every result depends on it."
     ),
@@ -139,7 +139,7 @@ _EN_SHORT_MESSAGES = {
     "ratio_260_280": "260/280 out of range",
     "ratio_260_230": "260/230 out of range",
     "negative": "Negative concentration",
-    "blank_spread": "Blanks do not agree",
+    "blank_dispersion": "Blanks do not agree",
     "pathlength": "Implausible pathlength",
 }
 
@@ -165,9 +165,9 @@ _ES_MESSAGES = {
         "Normalmente el pozo del blanco estaba sucio o la gota no llego a tocar "
         "las dos superficies."
     ),
-    "blank_spread": (
-        "Los pozos del blanco no coinciden entre si: {spread:.4f} AU de diferencia "
-        "entre el mayor y el menor ({cv:.1f}% a 260 nm). Limpia la placa, vuelve a "
+    "blank_dispersion": (
+        "Los pozos del blanco no coinciden entre si: desviacion estandar de "
+        "{sd:.4f} AU entre ellos ({cv:.1f}% a 260 nm). Limpia la placa, vuelve a "
         "cargar el agua y repite el blanco antes de leer muestras: todos los "
         "resultados dependen de esto."
     ),
@@ -190,7 +190,7 @@ _ES_SHORT_MESSAGES = {
     "ratio_260_280": "260/280 fuera de rango",
     "ratio_260_230": "260/230 fuera de rango",
     "negative": "Concentracion negativa",
-    "blank_spread": "Los blancos no coinciden",
+    "blank_dispersion": "Los blancos no coinciden",
     "pathlength": "Camino optico poco creible",
 }
 
@@ -450,22 +450,46 @@ def blank_cv_percent(blanks: dict[str, RawWell], wavelength: int = 260) -> float
     return (variance ** 0.5) / abs(mean) * 100.0
 
 
-def blank_spread(blanks: dict[str, RawWell]) -> float:
-    """Range of the background-corrected blank across wells, in absorbance units.
+def blank_dispersion(blanks: dict[str, RawWell]) -> float:
+    """How far the background-corrected blank wells disagree, in absorbance units.
 
-    This, not the CV, is what matters. The raw readings differ well to well by a
-    few percent, but most of that is background that the 320 nm reference removes.
-    What gets subtracted from every sample is (260 - 320), so the spread of *that*
-    is the error a bad blank injects.
+    The sample standard deviation (n-1) of (260 - 320) across the wells. That
+    quantity, not the raw absorbance, is what matters: the raw readings differ
+    well to well by a few percent, but most of that is background the 320 nm
+    reference removes, and what gets subtracted from every sample is
+    (260 - 320).
 
-    A coefficient of variation on two or three wells is also wildly unstable: a
-    simulated blank of two wells could exceed a 5% CV on ordinary noise and warn
-    about nothing.
+    This was `max - min` until 18 November 2026, which was a mistake, and one
+    that stayed hidden until somebody blanked every well before using it. A
+    range grows with the number of wells however good the blanking is: the
+    expected max-min of n draws is about 2.85 standard deviations at n=8 but
+    3.90 at n=24, so a fixed limit on it got steadily harder to meet the more
+    wells were blanked. Worse, it ran opposite to its own purpose. What a blank
+    injects into every sample is the error of the *mean* blank, and that shrinks
+    as 1/sqrt(n) -- on the real eight-well blank, from 0.00031 AU at n=8 to
+    0.00018 AU at n=24. The gate tightened as the thing it guards against got
+    smaller, and a technician blanking a whole plate was refused for having been
+    more careful rather than less.
+
+    A standard deviation has no such drift. It estimates the same per-well
+    disagreement whether two wells were blanked or forty-eight, which is what
+    "do these wells agree with each other?" ought to mean. It is also exactly
+    the absolute counterpart of the CV% -- CV% is this divided by the mean --
+    and that is the role this number plays; see BLANK_DISPERSION_LIMIT_AU.
+
+    One consequence is deliberate: a single bad drop among twenty-four now
+    passes, where it used to fail. It should pass. That well contributes a
+    twenty-fourth of the blank, so a well 0.003 AU out moves the subtracted
+    blank by 0.0001 AU, which is nothing at 0.5 mm. It is still painted red by
+    `divergent_blank_wells` so the spot can be wiped or dropped. Naming it is
+    useful; refusing to read because of it was not.
     """
     deltas = [b.corrected(260) for b in blanks.values() if 260 in b.readings]
     if len(deltas) < 2:
         return 0.0
-    return max(deltas) - min(deltas)
+    mean = sum(deltas) / len(deltas)
+    variance = sum((d - mean) ** 2 for d in deltas) / (len(deltas) - 1)
+    return variance ** 0.5
 
 
 # The blanking verdict, as Gen5 makes it.
@@ -484,16 +508,38 @@ def blank_spread(blanks: dict[str, RawWell]) -> float:
 # own software is worth more here than being carefully stricter than it.
 BLANK_CV_LIMIT_PERCENT = 10.0
 
-# Above this spread the blank is not trustworthy. A blank is ~0.006 AU, and at
-# 0.5 mm an error of 0.004 AU is 4 ng/uL of dsDNA: nothing on a 400 ng/uL sample,
-# ruinous on a 10 ng/uL one.
+# Above this disagreement between the blank wells the blank is not trustworthy.
+# At 0.5 mm an error of 0.004 AU in the subtracted blank is 4 ng/uL of dsDNA:
+# nothing on a 400 ng/uL sample, ruinous on a 10 ng/uL one.
 #
 # No longer the gate -- see BLANK_CV_LIMIT_PERCENT. It is kept because CV% is a
 # ratio and so says nothing about absolute size: a blank sitting on a high
 # background can hold its CV% under 10 while its wells disagree by more ng/uL
 # than anyone would report. This is the floor under that case, and it is
 # deliberately loose enough that in ordinary use the CV% limit is what decides.
-BLANK_SPREAD_LIMIT_AU = 0.004
+#
+# The number is set from what the four known quantities actually are, rather
+# than converted from the 0.004 AU range limit it replaces. Converting is what
+# a first attempt did -- 0.004 divided by the 2.85 standard deviations a range
+# of eight spans, giving 0.0014 -- and it reintroduced the same bug in reverse.
+# A standard deviation estimated from two wells is a very noisy estimate of
+# itself: across 400 simulated two-well blanks its spread reaches 0.0021 AU
+# where the same simulator at eight wells never passes 0.0014. A flat limit at
+# 0.0014 would therefore have refused about one two-well blank in twelve on a
+# clean plate, and two wells is this lab's commonest blanking.
+#
+#   0.00089 AU   the real blanking Gen5 accepted (Gen5_LVA_NAQ_0001, column 2,
+#                eight wells, 26 October 2026)
+#   0.00000 AU   the real two-well blanking Gen5 accepted (Gen5_LVA_NAQ_0008)
+#   0.00212 AU   the worst of 400 simulated two-well blanks, none of which
+#                should warn about anything
+#   0.00354 AU   two wells disagreeing by 0.005 AU, which the tests require to
+#                be refused and which is 5 ng/uL of dsDNA at 0.5 mm
+#
+# 0.0025 sits between the last two, so no number of wells raises a false alarm
+# on a good plate and the disagreement that ought to be caught still is. That
+# it is far out in the tail is the point: this is a floor, not the gate.
+BLANK_DISPERSION_LIMIT_AU = 0.0025
 
 # How far one blank well may sit from the middle of the others before it is named
 # on screen as the spot to wipe.
@@ -560,7 +606,7 @@ class BlankReport:
 
     wells: tuple[str, ...]
     divergent: tuple[str, ...]
-    spread_au: float
+    dispersion_au: float
     cv_percent: dict[int, float]
     valid: bool
     reason: str = ""
@@ -629,7 +675,7 @@ def wells_to_discard(
 def blank_report(
     blanks: dict[str, RawWell],
     cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
-    spread_limit_au: float = BLANK_SPREAD_LIMIT_AU,
+    dispersion_limit_au: float = BLANK_DISPERSION_LIMIT_AU,
     divergence_limit_au: float = BLANK_DIVERGENCE_LIMIT_AU,
 ) -> BlankReport:
     """Judge a set of blank wells the way Gen5 does.
@@ -638,9 +684,11 @@ def blank_report(
     raw absorbances, against `cv_limit_percent`. That is Gen5's rule and Gen5's
     default of 10; see docs/GEN5_NOTES.md for where the number comes from.
 
-    `spread_limit_au` is a floor underneath it, for the case a ratio cannot
+    `dispersion_limit_au` is a floor underneath it, for the case a ratio cannot
     see: a blank on a high background can keep its CV% respectable while its
-    wells disagree by an absolute amount that matters at 0.5 mm.
+    wells disagree by an absolute amount that matters at 0.5 mm. Neither limit
+    depends on how many wells were blanked, so blanking every well before using
+    it is judged the same way as blanking two.
 
     A well that sits well away from the others is still named in `divergent`
     and painted red, but that alone no longer blocks the run. It tells her
@@ -652,12 +700,12 @@ def blank_report(
     treats as a failed blank.
     """
     if not blanks:
-        return BlankReport(wells=(), divergent=(), spread_au=0.0,
+        return BlankReport(wells=(), divergent=(), dispersion_au=0.0,
                            cv_percent={}, valid=False, reason="empty")
 
     wavelengths = sorted(set.intersection(*(set(b.readings) for b in blanks.values())))
     cv = {w: blank_cv_percent(blanks, w) for w in wavelengths}
-    spread = blank_spread(blanks)
+    dispersion = blank_dispersion(blanks)
 
     # Red means "discard this one and the rest agree" when the blanking has
     # failed, which is what Gen5 shows and what she is about to do about it.
@@ -676,15 +724,15 @@ def blank_report(
         reason = "single"
     elif cv and max(cv.values()) > cv_limit_percent:
         reason = "cv"
-    elif spread > spread_limit_au:
-        reason = "spread"
+    elif dispersion > dispersion_limit_au:
+        reason = "dispersion"
     else:
         reason = ""
 
     return BlankReport(
         wells=tuple(sorted(blanks)),
         divergent=tuple(sorted(divergent)),
-        spread_au=spread,
+        dispersion_au=dispersion,
         cv_percent=cv,
         valid=not reason,
         reason=reason,
@@ -698,9 +746,9 @@ def check_blanks(blanks: dict[str, RawWell]) -> list["Warning_"]:
     if len(blanks) < 2:
         return warnings
 
-    spread = blank_spread(blanks)
-    if spread > BLANK_SPREAD_LIMIT_AU:
-        warnings.append(warn("blank_spread", spread=spread,
+    dispersion = blank_dispersion(blanks)
+    if dispersion > BLANK_DISPERSION_LIMIT_AU:
+        warnings.append(warn("blank_dispersion", sd=dispersion,
                              cv=blank_cv_percent(blanks, 260)))
     return warnings
 

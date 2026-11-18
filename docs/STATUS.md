@@ -155,6 +155,8 @@ than the Spanish precisely so that it would.
   does not match what they will get.
 - **A blank read with no plate in the carrier reports nonsense, confidently.** See
   below.
+- **Blanking every well used to be refused for being too many wells.** Fixed
+  18 November 2026; see below.
 
 ## The empty-carrier blank
 
@@ -203,13 +205,87 @@ This matters more than it looks, because reading a blank with nothing loaded is 
 what someone does when they install this from GitHub and want to see the thing move.
 The first impression should not be a red well.
 
+## Blanking every well, 18 November 2026
+
+The technician in the definite lab blanks **every well she is about to use** before
+using it, rather than the two or eight these thresholds were set from. Doing that, she
+was refused over and over, with wells painted red — and when asked which well, she said
+it was a different one each time.
+
+A different well each time is the diagnosis. A dirty spot is the same spot twice.
+
+The cause was ours. The absolute floor under Gen5's CV% check was `max - min` of the
+corrected blank wells, against a fixed 0.004 AU limit. A range grows with the number of
+wells however good the blanking is — the expected highest-to-lowest of n draws is about
+2.85 standard deviations at n=8 but 3.90 at n=24 — so the gate tightened the more wells
+she blanked. Meanwhile the quantity that limit exists to bound, the error the blank
+injects into every sample, is the error of the **mean** blank, and that shrinks as
+1/sqrt(n): on the real eight-well blank, from 0.00031 AU at n=8 to 0.00018 AU at n=24.
+**The gate tightened as the thing it guards against got smaller.** She was refused for
+having been more careful, not less.
+
+What it is now: the sample standard deviation of the same corrected values, which
+estimates the same per-well disagreement at any number of wells, and is the absolute
+counterpart of the CV% it sits under. Reproduced with the simulator at the size she was
+working at, sixteen wells, before and after:
+
+| blanking | refused before | refused now |
+|---|---|---|
+| whole plate, 16 wells | 27 of 40 reads | 0 of 40 |
+| one column, 8 wells | 13 of 40 | 0 of 40 |
+| four wells | 1 of 40 | 0 of 40 |
+
+The limit, 0.0025 AU, is set from what the known quantities are rather than converted
+from the old one. Converting was the first attempt — 0.004 divided by 2.85 — and it
+reintroduced the same bug in reverse, because a standard deviation estimated from two
+wells is a very noisy estimate of itself: across 400 simulated two-well blanks it
+reaches 0.0021 AU where the same simulator at eight wells never passes 0.0014. A flat
+0.0014 would have refused about one two-well blank in twelve on a clean plate, and two
+wells is this lab's commonest blanking.
+
+| | corrected SD |
+|---|---|
+| the real blanking Gen5 accepted (`Gen5_LVA_NAQ_0001`, 8 wells) | 0.00089 AU |
+| the real two-well blanking Gen5 accepted (`Gen5_LVA_NAQ_0008`) | 0.00000 AU |
+| worst of 400 simulated two-well blanks, none of which should warn | 0.00212 AU |
+| **the limit** | **0.0025 AU** |
+| two wells disagreeing by 0.005 AU, which the tests require be refused | 0.00354 AU |
+
+One consequence is deliberate: **a single bad drop among twenty-four now passes.** It
+should. That well is a twenty-fourth of the blank, so a spot 0.003 AU out moves what
+gets subtracted by 0.0001 AU, which is nothing at 0.5 mm. It is still painted red by
+`divergent_blank_wells` so the spot can be wiped or dropped — the screen says VALID and
+the read button stays live. Naming the well was useful; refusing the read over it was
+not. Tell her that red no longer means she cannot read.
+
+Two things came out of not being able to answer "which well?":
+
+- **The screen could not say which limit had stopped her.** The CV% message said
+  "above the limit" and the disagreement message said "do not agree with each other",
+  which are the same sentence to anybody who has not read the source, and neither
+  carried a number. Both now give the measured value and the limit it passed.
+- **The workbook recorded nothing about the blank.** Every concentration in the file
+  was computed by subtracting it, and the file did not say which wells it came from,
+  how well they agreed, or whether any had been dropped. This had to be diagnosed from
+  Gen5's own HTML exports instead of from the lab's own spreadsheets. The summary sheet
+  now carries the wells, the CV% per wavelength, the disagreement, the verdict, and any
+  discarded wells — written whether the blank passed or not, since a blank accepted on
+  a loosened limit is the one somebody will want to see.
+
+Still open: the config key changed from `blank_spread_limit_au` to
+`blank_dispersion_limit_au`, because the number means something different now and a
+file still carrying `0.004` under the old name would have been read as a very loose
+limit rather than a slightly tight one. A machine with the old key in its
+`epoch_open.json` silently falls back to the new default, which is the safe direction,
+but the stale key stays in the file until somebody opens Preferences and saves.
+
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 392 passed as of this commit
+python3 tests/run_tests.py        # 431 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the
-run still reports every test as passed.** A green 392 from a headless machine has not
+run still reports every test as passed.** A green 431 from a headless machine has not
 exercised a single window. `tests/test_gui_starts.py` exists to tell "no display" apart
 from "broken" — run the suite where there is a real display before trusting it.

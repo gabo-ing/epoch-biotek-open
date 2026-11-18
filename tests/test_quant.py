@@ -301,22 +301,22 @@ class TestBlankConsistency:
 
         bad = dict(self.REAL_GOOD, G2=(0.0602, 0.0394))
         warnings = check_blanks(self.wells(bad))
-        assert warnings and warnings[0].code == "blank_spread"
+        assert warnings and warnings[0].code == "blank_dispersion"
 
     def test_spread_is_measured_on_the_corrected_value(self):
-        from epoch_open.quant import blank_spread
+        from epoch_open.quant import blank_dispersion
 
         # Raw 260 differs by 0.020 between these, but it is all background and
         # the 320 reference removes it, so the blank they contribute is identical.
         same = self.wells({"A2": (0.045, 0.039), "A3": (0.065, 0.059)})
         # Not exactly zero: 0.045-0.039 is 0.006000000000000005 in binary.
-        assert blank_spread(same) == pytest.approx(0.0, abs=1e-9)
+        assert blank_dispersion(same) == pytest.approx(0.0, abs=1e-9)
 
     def test_a_single_blank_has_no_spread(self):
-        from epoch_open.quant import blank_spread, check_blanks
+        from epoch_open.quant import blank_dispersion, check_blanks
 
         one = self.wells({"A2": (0.045, 0.039)})
-        assert blank_spread(one) == 0.0
+        assert blank_dispersion(one) == 0.0
         assert check_blanks(one) == []
 
     def test_the_message_states_the_spread(self):
@@ -386,7 +386,7 @@ class TestWarningMessages:
 
         expected = {
             "high_reference", "noise_floor", "ratio_260_280", "ratio_260_230",
-            "negative", "blank_spread", "pathlength",
+            "negative", "blank_dispersion", "pathlength",
         }
         assert expected <= set(MESSAGES)
 
