@@ -1,6 +1,6 @@
-# v1.0.0 — Read a BioTek Epoch without Gen5 (Take3 + 96-well)
+# v1.0 — Read a BioTek Epoch without Gen5 (Take3 + 96-well)
 
-The text below is what goes in the GitHub release body. Tag `v1.0.0`.
+The text below is what goes in the GitHub release body. Tag `v1.0`.
 
 Attach two files, both built on Windows:
 
