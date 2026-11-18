@@ -132,9 +132,15 @@ than the Spanish precisely so that it would.
 
 ## Still open
 
-- The **Take3 workbook records nothing about the blank** — no wells, no CV%, no
-  verdict. Verified absent: no "Blanco", "CV" or "VALIDO" anywhere in the file. Gen5's
-  export has a "Blank Results" table. Adding ours was offered and not yet done.
+- **An absolute sanity check on the blank's level.** Every check we have asks whether
+  the blank wells agree with *each other*; none asks whether the blank is plausible at
+  all. On 18 November a water blank reached 0.105 AU corrected — 16x what Gen5 accepted
+  in October, and ten times a 10 ng/uL sample — and had all sixteen spots been
+  uniformly that dirty it would have passed. This is the mirror of the empty-carrier
+  case below: that one is a mean near zero, this is a mean far too high. A warning
+  rather than a refusal, above roughly 0.02 AU, would have caught every bad run that
+  day and none of the good ones. Not built: the threshold wants one Gen5 opinion on a
+  high-but-consistent blank, which the remaining trial days can supply.
 - Validation **Part F**: absolute accuracy against a reference standard. It needs a
   certified standard, not Gen5, so the trial expiry does not block it.
 - The two curve wrinkles above.
