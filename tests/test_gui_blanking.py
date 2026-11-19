@@ -221,12 +221,13 @@ class TestTheStatusBlock:
         finally:
             app.destroy()
 
-    def test_a_single_well_blank_reports_no_cv_and_is_refused(self):
+    def test_a_single_well_blank_reports_no_cv_and_is_used_anyway(self):
         """0,00 would read as perfect agreement instead of nothing to compare.
 
-        And a blank that cannot be judged is not a blank that passed: Gen5
-        refuses to read samples when the CV% cannot be calculated, so the
-        state says NO VALIDO and the screen says to mark a second well.
+        The blanking itself is valid, as it is in Gen5, which quantified
+        against single-well blanks in this lab on 26 October 2026. What the
+        screen owes her is the one thing that is true of a lone well and of
+        nothing else: there is no CV%, so nothing cross-checks it.
         """
         app = _app()
         if app is None:
@@ -234,10 +235,14 @@ class TestTheStatusBlock:
         try:
             _blanking(app, {"A2": 0.0})
             assert _field(app, "cv") == "-"
-            # Not DIVERGENTE: one well does not diverge from anything. It
-            # cannot be judged at all, which is a different failure.
-            assert _field(app, "state") == gui.TEXT["blank_state_invalid"]
-            assert app.blank_label.cget("text") == gui.TEXT["blank_why_single"]
+            assert _field(app, "state") == gui.TEXT["blank_state_valid"]
+            assert app.blank_report.valid
+            assert app._blank_ok()
+            assert app.blank_label.cget("text") == \
+                gui.TEXT["blank_ok_but_alone"]
+            # Amber: it passed, so red would contradict the VALID beside it,
+            # and green would overstate what one well can tell anybody.
+            assert app.blank_label.cget("style") == "Warn.TLabel"
         finally:
             app.destroy()
 
@@ -264,8 +269,23 @@ class TestTheStatusBlock:
             assert limit in shown, (limit, shown)
             assert "260" in shown
 
-            _blanking(app, {"A2": 0.0})
-            assert app.blank_label.cget("text") == gui.TEXT["blank_why_single"]
+            # The other refusal: wells that agree well enough as a ratio but
+            # not in absolute terms. It needs a high background, which the
+            # helper above cannot make, so the readings go in directly.
+            # CV% here is 1,1 at 260 nm -- nowhere near the limit -- while the
+            # corrected values are 0,005 and 0,013 AU apart.
+            app.blank_raw = {
+                "A2": RawWell(well="A2",
+                              readings={260: 0.500, 280: 0.300, 320: 0.495}),
+                "B2": RawWell(well="B2",
+                              readings={260: 0.508, 280: 0.300, 320: 0.495}),
+            }
+            app.blank_selected.clear()
+            app.blank_selected.update({"A2", "B2"})
+            app._refresh_state()
+            assert app.blank_report.reason == "dispersion"
+            assert app.blank_label.cget("text") == app._why_dispersion()
+            assert app.blank_label.cget("text") != app._why_cv()
         finally:
             app.destroy()
 

@@ -132,14 +132,11 @@ than the Spanish precisely so that it would.
 
 ## Still open
 
-- **We refuse a one-well blanking and Gen5 does not.** `Gen5_LVA_NAQ_0003` and `0005`
-  are single-well blankings from 26 October that Gen5 quantified against — 0003
-  reports samples at 436 and 440 ng/uL — and their Blank Results tables carry no CV
-  column at all. Gen5 has nothing to validate with one well, so it validates nothing
-  and uses it. Ours says `reason = "single"` and stops. Deliberately left alone: which
-  is better is a judgement, not a fact. A single blank well has no cross-check of any
-  kind, and this lab's commonest blanking is two. Someone's call, not a bug to fix
-  quietly.
+- What Gen5 shows on screen for a one-well blanking: `Status:` and `CV%:` with a
+  single well selected. The October reports carry no CV column at all, so the fields
+  could be empty, or VALID with a blank CV. We show VALID with `-` for the CV and say
+  in amber that nothing cross-checks it, which is defensible either way, but if a
+  screenshot turns up we should match Gen5 exactly.
 - Validation **Part F**: absolute accuracy against a reference standard. It needs a
   certified standard, not Gen5, so the trial expiry does not block it.
 - The two curve wrinkles above.
@@ -403,10 +400,39 @@ layout. There is no majority to appeal to in an 8-against-8 split and the tie br
 on noise. Red means "these wells disagree with the others", never "these wells are
 dirty", and no amount of work on our side can make it mean more.
 
+## Asked for at the bench, 19 November 2026
+
+**A one-well blanking is accepted again.** Gen5 quantifies against one blank well
+— `Gen5_LVA_NAQ_0003` reports samples at 436 and 440 ng/uL against a single A3 —
+and the owner had done the same in this lab and been allowed to carry on. We had
+refused it since reading Gen5's help as requiring two wells for "use blank
+average", which the reports contradict: their Blank Results tables carry no CV
+column at all, because a CV% of one number does not exist. Refusing on that basis
+invented a failure.
+
+The screen says so rather than staying silent: VALID, with `-` for the CV%, and
+an amber line explaining that nothing cross-checks a lone well. The blank-level
+check still runs — it needs no second well, and it is the only thing that can be
+said about a single blank at all.
+
+**Click and drag across the well grids**, which Gen5 has and a technician marking
+sixteen spots several times a day misses. `DragSelect` in `ui.py`, wired into both
+programs: the Take3 blank and sample grids and the multispectral plate.
+
+It paints rather than rubber-bands. The press sets the direction — from an
+unmarked well it marks everything the pointer crosses, from a marked one it clears
+them — and crossing a well twice does not undo it. The grids are two columns wide
+in Take3, so a rectangle would have had little to offer, and painting forgives a
+wandering hand.
+
+One instance per grid, which is what keeps a drag inside the grid it began in. The
+blank and sample grids sit side by side and a drag running from one into the other
+would mark samples nobody asked for; there is a test for exactly that.
+
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 471 passed as of this commit
+python3 tests/run_tests.py        # 483 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the

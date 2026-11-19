@@ -112,20 +112,33 @@ class TestAgainstTheOneRealRun:
         for wavelength, reported in GEN5_REPORTED_CV.items():
             assert abs(report.cv_percent[wavelength] - reported) < 0.4
 
-    def test_a_single_well_blank_is_refused_because_it_cannot_be_judged(self):
-        """One well has no CV%, and Gen5 treats that as a failed blank.
+    def test_a_single_well_blank_is_accepted_as_gen5_accepts_one(self):
+        """One well has no CV%, and Gen5 uses it anyway.
 
-        Its help is explicit: if the highest CV% exceeds the limit *or the CV%
-        cannot be calculated*, it warns and will not read samples. One well
-        cannot be checked against anything, so accepting it would mean
-        quantifying against a blank nobody has any evidence about.
+        These are the real readings: A3 of Gen5_LVA_NAQ_0003, 26 October 2026,
+        a blanking of one well that Gen5 went on to quantify against, with
+        samples reported at 436 and 440 ng/uL. Its Blank Results table carries
+        no CV column at all.
 
-        This changed when that rule was read. A one-well blank used to pass.
+        This behaviour has now changed twice. It passed originally; it was
+        made to fail when Gen5's help was read as requiring two or more wells
+        for "use blank average"; and it passes again since the reports showed
+        what Gen5 actually does, confirmed by the owner, who had blanked one
+        well in this lab and been allowed to carry on. A CV% of a single
+        number does not exist, and refusing on that basis invents a failure.
         """
         report = blank_report(wells({"A3": (0.053, 0.049, 0.045)}))
-        assert not report.valid
-        assert report.reason == "single"
+        assert report.valid
+        assert report.reason == ""
         assert report.cv_percent[260] == 0.0
+
+    def test_a_single_well_blank_is_still_judged_on_its_level(self):
+        """The one thing that can be said about a lone blank, and is."""
+        clean = blank_report(wells({"A3": (0.053, 0.049, 0.045)}))
+        assert not clean.level_is_high()
+        dirty = blank_report(wells({"A3": (0.090, 0.070, 0.050)}))
+        assert dirty.valid
+        assert dirty.level_is_high()
 
 
 class TestFindingTheBadSpot:

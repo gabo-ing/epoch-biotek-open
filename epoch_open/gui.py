@@ -169,9 +169,10 @@ _EN_TEXT = {
                      "{cv:.1f} at {nm} nm, above the limit of {limit:.1f}. "
                      "Clean the plate, load the water again and repeat the "
                      "blank."),
-    "blank_why_single": ("A CV% cannot be computed from a single well, so "
-                         "there is no way to tell whether the blank is good. "
-                         "Mark at least two wells and repeat the blank."),
+    "blank_ok_but_alone": ("Blank VALID from one well -- you can read "
+                           "samples. A CV% cannot be computed from a single "
+                           "well, so nothing cross-checks it; a second well "
+                           "would."),
     "blank_why_dispersion": ("The blank wells do not agree with each other: "
                              "a standard deviation of {sd:.4f} AU between "
                              "them, above the limit of {limit:.4f}. Clean the "
@@ -356,9 +357,10 @@ _ES_TEXT = {
                      "es {cv:.1f} a {nm} nm, por encima del limite de "
                      "{limit:.1f}. Limpia la placa, vuelve a cargar el agua y "
                      "repite el blanco."),
-    "blank_why_single": ("Con un solo pozo no se puede calcular el CV%, asi que "
-                         "no hay forma de saber si el blanco es bueno. Marca al "
-                         "menos dos pozos y repite el blanco."),
+    "blank_ok_but_alone": ("Blanco VALIDO con un solo pozo: ya puedes leer "
+                           "muestras. Con un solo pozo no se puede calcular "
+                           "el CV%, asi que nada lo contrasta; un segundo "
+                           "pozo si."),
     "blank_why_dispersion": ("Los pozos del blanco no concuerdan entre si: "
                              "desviacion estandar de {sd:.4f} AU entre ellos, "
                              "por encima del limite de {limit:.4f}. Limpia la "
@@ -434,7 +436,8 @@ class _Decimal(float):
 SAMPLE_TYPES = ("dsDNA", "ssDNA", "RNA", "protein")
 
 
-from .ui import (RoundedButton, ScreenFit, enable_dpi_awareness,
+from .ui import (DragSelect, RoundedButton, ScreenFit,
+                 enable_dpi_awareness,
                  INK, MUTED, LINE, CANVAS, PANEL, CHOSEN, CHOSEN_INK,
                  EMPTY, GOOD, BAD, WARN_ROW, WARN_INK, ZEBRA, TITLE_BAR,
                  TITLE_INK, TITLE_MUTED, STATUS_BAR, WARN_BADGE,
@@ -697,6 +700,12 @@ class App(ScreenFit, tk.Tk):
         grid = ttk.Frame(frame, style="Card.TFrame")
         grid.pack()
 
+        # One per grid, so a drag begun in the blank cannot wander into the
+        # samples beside it.
+        dragging = DragSelect(
+            toggle=lambda n, s=selection, b=buttons: self._toggle(n, s, b),
+            is_selected=lambda n, s=selection: n in s)
+
         for position, column in enumerate(take3.COLUMNS):
             ttk.Label(grid, text=str(column), width=7, anchor="center",
                       style="CardMuted.TLabel").grid(row=0, column=position + 1)
@@ -725,6 +734,7 @@ class App(ScreenFit, tk.Tk):
                 if nameable:
                     button.bind("<Double-Button-1>",
                                 lambda _e, n=name: self._name_well(n))
+                dragging.add(button, name)
                 buttons[name] = button
 
         if not nameable:
@@ -916,7 +926,6 @@ class App(ScreenFit, tk.Tk):
             return TEXT["blank_why_empty"]
         return {
             "cv": self._why_cv(),
-            "single": TEXT["blank_why_single"],
             "divergent": TEXT["blank_why_divergent"],
             "dispersion": self._why_dispersion(),
             "empty": TEXT["blank_why_empty"],
@@ -1051,7 +1060,16 @@ class App(ScreenFit, tk.Tk):
             # nothing at all here -- proved on 19 November 2026, when it
             # accepted a blank at 0.038 AU and then reported clean water at
             # -31,6 ng/uL with a flawless 260/280 on every well.
-            if self.blank_report and self.blank_report.level_is_high(
+            # A lone well is valid and Gen5 uses one, but it is the only
+            # blanking with nothing at all to check it against, so it says so.
+            # Ranked under the dirty-blank sentence: being filthy is worse
+            # than being unverified, and a lone well can be both.
+            if (self.blank_report and len(self.blank_report.wells) == 1
+                    and not self.blank_report.level_is_high(
+                        CONFIG.blank_level_warn_au)):
+                self.blank_label.configure(text=TEXT["blank_ok_but_alone"],
+                                           style="Warn.TLabel")
+            elif self.blank_report and self.blank_report.level_is_high(
                     CONFIG.blank_level_warn_au):
                 level = self.blank_report.level_au
                 self.blank_label.configure(

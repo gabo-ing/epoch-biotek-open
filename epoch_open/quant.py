@@ -814,21 +814,22 @@ def blank_report(
         divergent = divergent_blank_wells(blanks, divergence_limit_au)
 
     if len(blanks) < 2:
-        # A CV% cannot be calculated from one well, and we treat that as a
-        # failed blanking rather than a pass.
+        # One well is a blanking Gen5 accepts, so we accept it too.
         #
-        # This is OUR rule, not Gen5's, and the help file misled us about it.
-        # Gen5_LVA_NAQ_0003 and 0005 are single-well blankings from 26 October
-        # 2026 that Gen5 went on to quantify against -- 0003 reports samples at
-        # 436 and 440 ng/uL -- and their Blank Results tables have no CV column
-        # at all. So Gen5 does not refuse a one-well blank; it simply has
-        # nothing to validate and uses it.
+        # We used to refuse it, on a reading of the help file that said Gen5
+        # needs two or more wells for "use blank average". Gen5_LVA_NAQ_0003
+        # and 0005 are single-well blankings from 26 October 2026 that Gen5
+        # quantified against -- 0003 reports samples at 436 and 440 ng/uL --
+        # and their Blank Results tables carry no CV column at all. Gen5 has
+        # nothing to validate with one well, so it validates nothing and uses
+        # it. Confirmed at the bench on 19 November 2026 by the owner, who had
+        # done exactly that in this lab and been allowed to carry on.
         #
-        # Left as it is, deliberately, because which behaviour is better is a
-        # judgement rather than a fact: a single blank well has no cross-check
-        # of any kind, and this lab's commonest blanking is two. Flagged in
-        # docs/STATUS.md as a decision for the owner, not quietly changed.
-        reason = "single"
+        # There is nothing dishonest in it. A CV% of one number does not
+        # exist, and saying so is better than inventing a failure. What the
+        # blanking still gets is the level check, which needs no second well
+        # and is the only thing that can be said about a lone blank at all.
+        reason = ""
     elif cv and max(cv.values()) > cv_limit_percent:
         reason = "cv"
     elif dispersion > dispersion_limit_au:

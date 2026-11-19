@@ -18,6 +18,80 @@ import tkinter as tk
 from tkinter import ttk
 
 
+class DragSelect:
+    """Click and drag across a grid of wells to take them all in at once.
+
+    Gen5 does this on its plate grids, and a technician who marks sixteen
+    spots several times a day notices its absence immediately. Asked for at
+    the bench on 19 November 2026.
+
+    The behaviour is painting rather than rubber-banding: the press decides
+    the direction, and every well the pointer then crosses is made to match
+    it. Dragging from an unmarked well marks everything it touches; dragging
+    from a marked one clears them. That is forgiving of a wandering hand in a
+    way a rectangle is not, and the grids here are two columns wide, so a
+    rectangle would have little to offer anyway.
+
+    One instance per grid, which is what keeps a drag inside the grid it
+    started in: a well belonging to another grid is simply not registered
+    here and is left alone.
+
+    `toggle(name)` flips one well and `is_selected(name)` reports its state;
+    both are the screen's own, so colours, the blanking verdict and the step
+    buttons all update exactly as they do for a single click.
+    """
+
+    def __init__(self, toggle, is_selected):
+        self._toggle = toggle
+        self._is_selected = is_selected
+        self._names = {}          # widget -> well name
+        self._mode = None         # True while marking, False while clearing
+        self._painted = set()
+
+    def add(self, widget, name: str) -> None:
+        """Register one well. Its own click handler is left untouched."""
+        self._names[widget] = name
+        # add="+" because RoundedButton has already bound Button-1 to its
+        # command. Ours runs after it, so by the time the direction of the
+        # drag is worked out the press has done its own toggling.
+        widget.bind("<Button-1>", self._press, add="+")
+        widget.bind("<B1-Motion>", self._drag, add="+")
+        widget.bind("<ButtonRelease-1>", self._release, add="+")
+
+    # -- the drag -----------------------------------------------------------
+
+    def _press(self, event) -> None:
+        name = self._names.get(event.widget)
+        if name is None:
+            return
+        if str(event.widget.cget("state")) != "normal":
+            # A press on a disabled well does nothing, so there is no
+            # direction to take from it and a drag would guess.
+            self._mode, self._painted = None, set()
+            return
+        self._mode = self._is_selected(name)
+        self._painted = {name}
+
+    def _drag(self, event) -> None:
+        if self._mode is None:
+            return
+        # Tk sends every motion event to the widget the press happened in, so
+        # the well under the pointer has to be looked up rather than read off
+        # the event.
+        under = event.widget.winfo_containing(event.x_root, event.y_root)
+        name = self._names.get(under)
+        if name is None or name in self._painted:
+            return
+        self._painted.add(name)
+        if str(under.cget("state")) != "normal":
+            return
+        if self._is_selected(name) != self._mode:
+            self._toggle(name)
+
+    def _release(self, _event) -> None:
+        self._mode, self._painted = None, set()
+
+
 class RoundedButton(tk.Canvas):
     """A flat button with rounded corners, drawn rather than themed.
 

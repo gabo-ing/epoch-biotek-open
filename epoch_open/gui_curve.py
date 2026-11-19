@@ -42,7 +42,8 @@ from .ui import (ACTION, ACTION_HOVER, ACTION_IDLE, ACTION_IDLE_HOVER,
                  GOOD, GOOD_BADGE, GOOD_BADGE_INK, INK, LINE, MUTED, PANEL,
                  STATUS_BAR, TITLE_BAR, TITLE_INK, TITLE_MUTED, WARN_BADGE,
                  WARN_BADGE_INK, WARN_INK, WARN_ROW, WELL_HOVER, WELL_INK,
-                 WELL_LINE, ZEBRA, LanguageDialog, RoundedButton, ScreenFit,
+                 WELL_LINE, ZEBRA, DragSelect, LanguageDialog,
+                 RoundedButton, ScreenFit,
                  enable_dpi_awareness)
 from .xlsx import export_curve
 
@@ -84,8 +85,9 @@ _EN_TEXT = {
     "role_blanco": "Blank",
     "role_patron": "Standard",
     "role_muestra": "Sample",
-    "role_hint": ("Click a well to mark it. Double click a standard for its "
-                  "concentration, a sample for its name."),
+    "role_hint": ("Click a well to mark it, or drag across several. Double "
+                  "click a standard for its concentration, a sample for its "
+                  "name."),
 
     "settings": "Read",
     "wavelength": "Wavelengths:",
@@ -228,8 +230,9 @@ _ES_TEXT = {
     "role_blanco": "Blanco",
     "role_patron": "Patron",
     "role_muestra": "Muestra",
-    "role_hint": ("Pulsa un pozo para marcarlo. Doble clic en un patron para "
-                  "su concentracion, en una muestra para su nombre."),
+    "role_hint": ("Pulsa un pozo para marcarlo, o arrastra sobre varios. "
+                  "Doble clic en un patron para su concentracion, en una "
+                  "muestra para su nombre."),
 
     "settings": "Lectura",
     "wavelength": "Longitudes de onda:",
@@ -569,6 +572,13 @@ class App(ScreenFit, tk.Tk):
         well_w = self.px(34 if self.compact else 40)
         well_h = self.px(15 if self.tiny else (20 if self.compact else 24))
 
+        # The role being marked decides what a drag paints: dragging from a
+        # well that does not hold it marks the run, dragging from one that
+        # does clears it.
+        dragging = DragSelect(
+            toggle=self._click_well,
+            is_selected=lambda n: self.roles.get(n) == self.role.get())
+
         for index, column in enumerate(COLUMNS):
             ttk.Label(grid, text=str(column), width=4, anchor="center",
                       style="CardMuted.TLabel").grid(row=0, column=index + 1)
@@ -588,6 +598,7 @@ class App(ScreenFit, tk.Tk):
                 button.grid(row=row_index + 1, column=index + 1, padx=1, pady=1)
                 button.bind("<Double-Button-1>",
                             lambda _e, n=name: self._edit_well(n))
+                dragging.add(button, name)
                 self.wells[name] = button
 
         if not self.tiny:
