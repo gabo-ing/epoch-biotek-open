@@ -375,11 +375,36 @@ drawn from photographs of the same runs. Its Blank Results tables print the
 kept wells plain and the discarded wells between asterisks, which is how the
 red/green sets above were recovered.
 
+### Gen5 never writes a report for a blanking
+
+Confirmed at the bench: Gen5 produces a report only when it reads **samples**,
+and it will not read samples until the blank is valid. So no Gen5 file can ever
+carry a refused verdict, and asking for one is asking for something that does
+not exist.
+
+That looked for a long time like the reason this project had no Gen5 refusal to
+calibrate against. It was not. **The Blank Results table inside a sample report
+lists every blank well, including the discarded ones**, between asterisks. The
+raw data of the refused blanking is therefore in the file; only the verdict is
+on the screen. Pair the report with a screenshot of the moment its blank was
+read and the refusal is fully reconstructed.
+
+Two were recovered that way, and both are now tests:
+
+| blank read | Gen5's screen | ours | gap |
+|---|---|---|---|
+| 09:38:28 (`0010`) | DIVERGING, 17,552% | 17,613% | 0,061 |
+| 09:47:48 (`0012`, `0014`) | DIVERGING, 30,374% | 30,439% | 0,065 |
+
+Both refused by both programs, on CV%, inside the rounding of a three-decimal
+column. The technician's workaround is what made them exist at all: read the
+blank, discard whatever Gen5 reddens so the run can proceed, then read **all
+sixteen** sample wells including the ones just discarded as blanks.
+
 Still worth grabbing before the licence lapses:
 
-1. One read with no plate in the carrier, for the empty-carrier case.
-2. A blanking Gen5 refuses, with its report saved -- every file here is a run
-   that went on to read samples, so the refusals are still only screenshots.
+1. One read with no plate in the carrier. It has to be done as a *sample* read
+   against a valid blank, since that is the only thing that writes a file.
 
 ## What was done about it
 

@@ -7,8 +7,9 @@ is off, and has to refuse to quantify until none of them is.
 
 The ground truth is Gen5's own output on this instrument. Gen5_LVA_NAQ_0001 is
 an eight-well blanking it declared VALID; on 19 November 2026 a borrowed demo
-licence added runs it REFUSED and runs it accepted that it should not have, so
-the thresholds here are no longer guesses in both directions.
+licence added two blankings it REFUSED, recovered by pairing a report with a
+screenshot of the moment its blank was read, and one it accepted that it should
+not have. The thresholds here are no longer guesses in either direction.
 
 What that day settled, with Gen5 and epoch-open reading the same loaded plate
 minutes apart:
@@ -768,3 +769,80 @@ class TestTheBlankingGen5AcceptedThatWeRefuse:
         # Ours keeps one water rather than a mixture of both.
         kept = set(self.ALL) - ours
         assert all(n[0] in "ABCD" for n in kept), kept
+
+
+class TestTheBlankingsGen5Refused:
+    """The ground truth this project spent three weeks without.
+
+    Gen5 writes a report only when it reads SAMPLES, and it only reads samples
+    once the blank is valid, so no Gen5 file ever carries a refused verdict.
+    That was taken to mean the refusals were unrecoverable, and every limit
+    here was set without one.
+
+    It was the wrong conclusion. The Blank Results table inside a sample report
+    lists **every** blank well, with the discarded ones between asterisks -- so
+    the raw data of the refused blanking is in the file, and only the verdict
+    is on the screen. Pair a report with the screenshot of the moment its blank
+    was read and the refusal is fully reconstructed.
+
+    Two were recovered this way on 19 November 2026. Both are blankings Gen5
+    showed as DIVERGING and declined to read samples against, and both are
+    refused here for the same reason at the same number.
+    """
+
+    # Blank read 09:47:48, as Gen5_LVA_NAQ_0012 and 0014 both print it. The
+    # screen at that moment: DIVERGING, CV%: 30,374.
+    AT_0947 = {
+        "A2": (0.052, 0.049, 0.046), "A3": (0.052, 0.048, 0.045),
+        "B2": (0.048, 0.046, 0.042), "B3": (0.043, 0.041, 0.038),
+        "C2": (0.047, 0.044, 0.041), "C3": (0.045, 0.042, 0.039),
+        "D2": (0.051, 0.048, 0.044), "D3": (0.045, 0.042, 0.039),
+        "E2": (0.094, 0.080, 0.062), "E3": (0.075, 0.058, 0.039),
+        "F2": (0.101, 0.083, 0.064), "F3": (0.080, 0.061, 0.042),
+        "G2": (0.078, 0.061, 0.042), "G3": (0.090, 0.070, 0.050),
+        "H2": (0.081, 0.061, 0.041), "H3": (0.079, 0.060, 0.040),
+    }
+    # Blank read 09:38:28 is TestTheBlankingGen5AcceptedThatWeRefuse.ALL --
+    # the same sixteen wells, four minutes earlier. Screen: DIVERGING, 17,552.
+    AT_0938 = TestTheBlankingGen5AcceptedThatWeRefuse.ALL
+
+    # What Gen5's own screen displayed as the verdict for each.
+    GEN5_SAID = {"09:38:28": 17.552, "09:47:48": 30.374}
+
+    def _wells(self, data):
+        return {n: quant.RawWell(well=n, readings={260: v[0], 280: v[1],
+                                                   320: v[2]})
+                for n, v in data.items()}
+
+    def test_gen5_refused_both_and_so_do_we(self):
+        for data in (self.AT_0938, self.AT_0947):
+            report = quant.blank_report(self._wells(data))
+            assert not report.valid
+            assert report.reason == "cv"
+
+    def test_the_numbers_match_what_gen5_displayed(self):
+        """Raws are printed to three decimals, so allow a fifth of a point."""
+        for when, data in (("09:38:28", self.AT_0938),
+                           ("09:47:48", self.AT_0947)):
+            report = quant.blank_report(self._wells(data))
+            ours = max(report.cv_percent.values())
+            shown = self.GEN5_SAID[when]
+            assert abs(ours - shown) < 0.2, (when, ours, shown)
+
+    def test_the_verdict_cv_is_the_highest_across_wavelengths(self):
+        """Which is what Gen5 displays, reference included."""
+        for data in (self.AT_0938, self.AT_0947):
+            report = quant.blank_report(self._wells(data))
+            assert max(report.cv_percent.values()) > \
+                quant.BLANK_CV_LIMIT_PERCENT
+
+    def test_both_would_still_be_refused_on_the_peak_alone(self):
+        """So neither refusal depends on how the reference is treated.
+
+        Worth asserting because a draft on 19 November briefly excluded the
+        reference from the verdict; these two runs do not distinguish the
+        rules, and nothing about them should be read as supporting either.
+        """
+        for data in (self.AT_0938, self.AT_0947):
+            report = quant.blank_report(self._wells(data))
+            assert report.cv_percent[260] > quant.BLANK_CV_LIMIT_PERCENT
