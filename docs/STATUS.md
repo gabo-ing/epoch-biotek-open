@@ -406,7 +406,7 @@ dirty", and no amount of work on our side can make it mean more.
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 460 passed as of this commit
+python3 tests/run_tests.py        # 467 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the

@@ -668,3 +668,103 @@ class TestTheReferenceWavelengthIsJudgedToo:
             quant.BLANK_CV_LIMIT_PERCENT
         assert not report.valid
         assert report.reason == "cv"
+
+
+class TestTheBlankingGen5AcceptedThatWeRefuse:
+    """The one place we are deliberately stricter than Gen5, with its data.
+
+    Gen5_LVA_NAQ_0010, the blanking of 09:38:28 on 19 November 2026, and the
+    screenshot of the same moment. Gen5 showed DIVERGING at 17,552%, reddened
+    B3, C2, C3, D3 and H2, the technician discarded exactly those five, the
+    CV fell to 9,08 and Gen5 read samples against the remaining eleven
+    (Gen5_LVA_NAQ_0011).
+
+    Those eleven wells are two different waters. Corrected, A-D average
+    0,0070 AU and E-H average 0,0196 -- nearly three times apart -- so the
+    blank Gen5 subtracted, 0,0150, was wrong for every well on the plate and
+    carried about 8 ng/uL of error into each A-D sample.
+
+    CV% on raw absorbance cannot see this. Most of each raw reading is the
+    320 nm background, which both waters share, and it swamps the difference
+    between them. The sample standard deviation of the CORRECTED values sees
+    it immediately: 0,0064 AU against a limit of 0,0025. That is the entire
+    reason BLANK_DISPERSION_LIMIT_AU exists, and this is the first measured
+    case of it earning its place rather than being argued for.
+
+    Keeping the test matters because the gate's cost is real: it is the one
+    rule that can stop a technician reading a plate Gen5 would have read. If
+    it is ever removed, it should be removed knowing this run exists.
+    """
+
+    # Gen5's own Blank Results table. Wells it discarded are marked.
+    ALL = {
+        "A2": (0.053, 0.050, 0.046), "A3": (0.051, 0.048, 0.045),
+        "B2": (0.050, 0.047, 0.043), "B3": (0.044, 0.041, 0.038),
+        "C2": (0.047, 0.045, 0.041), "C3": (0.046, 0.043, 0.039),
+        "D2": (0.051, 0.048, 0.043), "D3": (0.045, 0.043, 0.039),
+        "E2": (0.062, 0.054, 0.044), "E3": (0.059, 0.050, 0.040),
+        "F2": (0.063, 0.054, 0.044), "F3": (0.061, 0.052, 0.042),
+        "G2": (0.060, 0.052, 0.041), "G3": (0.061, 0.051, 0.040),
+        "H2": (0.083, 0.070, 0.060), "H3": (0.062, 0.051, 0.040),
+    }
+    GEN5_DISCARDED = {"B3", "C2", "C3", "D3", "H2"}
+
+    def _wells(self, names=None):
+        names = names or set(self.ALL)
+        return {n: quant.RawWell(well=n, readings={260: v[0], 280: v[1],
+                                                   320: v[2]})
+                for n, v in self.ALL.items() if n in names}
+
+    def test_our_cv_matches_gen5_on_all_sixteen(self):
+        """Gen5's screen: DIVERGING, CV%: 17,552. Raws are 3-dp."""
+        report = quant.blank_report(self._wells())
+        assert abs(report.cv_260 - 17.552) < 0.2, report.cv_260
+        assert not report.valid
+
+    def test_our_cv_matches_gen5_on_the_eleven_it_kept(self):
+        """Gen5 printed 260: 9,08  280: 4,6  320: 5,02."""
+        kept = set(self.ALL) - self.GEN5_DISCARDED
+        report = quant.blank_report(self._wells(kept))
+        for nm, gen5 in ((260, 9.08), (280, 4.6), (320, 5.02)):
+            assert abs(report.cv_percent[nm] - gen5) < 0.2, (nm, report.cv_percent[nm])
+
+    def test_gen5_would_have_passed_those_eleven_on_cv_alone(self):
+        kept = set(self.ALL) - self.GEN5_DISCARDED
+        report = quant.blank_report(self._wells(kept))
+        assert max(report.cv_percent.values()) < quant.BLANK_CV_LIMIT_PERCENT
+
+    def test_but_we_refuse_them_on_disagreement(self):
+        """Deliberate. Two waters cannot share one blank."""
+        kept = set(self.ALL) - self.GEN5_DISCARDED
+        report = quant.blank_report(self._wells(kept))
+        assert not report.valid
+        assert report.reason == "dispersion"
+        assert report.dispersion_au > quant.BLANK_DISPERSION_LIMIT_AU
+
+    def test_what_the_refusal_is_worth_in_nanograms(self):
+        """The error Gen5 carried into every A-D sample by accepting it."""
+        kept = set(self.ALL) - self.GEN5_DISCARDED
+        wells = self._wells(kept)
+        corrected = {n: w.corrected(260) for n, w in wells.items()}
+        low = [v for n, v in corrected.items() if n[0] in "ABCD"]
+        subtracted = sum(corrected.values()) / len(corrected)
+        error = (subtracted - sum(low) / len(low)) * 1000
+        assert 7 < error < 9, error
+
+    def test_the_level_warning_stays_quiet_here(self):
+        """0,0150 AU. Below the limit, and not the problem with this blank."""
+        kept = set(self.ALL) - self.GEN5_DISCARDED
+        report = quant.blank_report(self._wells(kept))
+        assert not report.level_is_high()
+
+    def test_our_red_set_is_not_gen5s_and_need_not_be(self):
+        """Gen5 drops the fewest wells that pass its one gate; we satisfy two.
+
+        Both answers are defensible and neither is recoverable from the other.
+        Pinned so the difference is a known one rather than a surprise.
+        """
+        ours = quant.wells_to_discard(self._wells())
+        assert ours != self.GEN5_DISCARDED
+        # Ours keeps one water rather than a mixture of both.
+        kept = set(self.ALL) - ours
+        assert all(n[0] in "ABCD" for n in kept), kept

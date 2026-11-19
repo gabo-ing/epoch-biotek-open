@@ -295,6 +295,41 @@ identical. The reports name which is which. **Prefer the file.**
 Not separately settled, and no longer interesting: whether 280 nm is judged. It
 is, by the same rule.
 
+### The blanking Gen5 accepted that we refuse
+
+`Gen5_LVA_NAQ_0010` plus the screenshot of 09:38:28. Gen5 showed DIVERGING at
+17,552%, reddened B3, C2, C3, D3 and H2, those five were discarded, the CV fell
+to 9,08 and Gen5 read samples against the remaining eleven (`0011`).
+
+Those eleven are two different waters. Corrected, A–D average **0,0070 AU** and
+E–H average **0,0196** — nearly three times apart. The blank Gen5 subtracted,
+0,0150, was wrong for every well on the plate, carrying about **8 ng/uL** of
+error into each A–D sample.
+
+CV% on raw absorbance cannot see this. Most of each raw reading is the 320 nm
+background, which both waters share, and it swamps the difference between them.
+The sample standard deviation of the **corrected** values sees it at once:
+0,0064 AU against a limit of 0,0025.
+
+This is the first measured case of `BLANK_DISPERSION_LIMIT_AU` earning its
+place rather than being argued for, and it is worth keeping in mind that the
+gate's cost is real — it is the one rule that can stop a technician reading a
+plate Gen5 would have read. Here, being stricter is right.
+
+Our red set also differs: Gen5 drops the fewest wells that satisfy its single
+gate, five of them, and keeps a mixture of both waters. We satisfy two gates and
+drop eight, keeping one water. Neither answer is recoverable from the other and
+both are defensible. Pinned in the tests so the difference stays a known one.
+
+### Reading samples after discarding blank wells
+
+Confirmed at the bench and in the screenshots: Gen5 leaves *Read Samples*
+greyed out while any reddened well is still selected as a blank. Deselect them
+and it unlocks. **The sample plate is independent** — a well dropped from the
+blank can still be read as a sample, and on 19 November all sixteen were. Our
+two grids behave the same way, which is why the Blank and Samples grids are
+drawn side by side rather than as one selection.
+
 ### Gen5's red/green is a tie-break, not a diagnosis
 
 With eight spots of one water and eight of another, Gen5 reddened **A–D at
