@@ -132,15 +132,11 @@ than the Spanish precisely so that it would.
 
 ## Still open
 
-- **An absolute sanity check on the blank's level.** Every check we have asks whether
-  the blank wells agree with *each other*; none asks whether the blank is plausible at
-  all. On 18 November a water blank reached 0.105 AU corrected — 16x what Gen5 accepted
-  in October, and ten times a 10 ng/uL sample — and had all sixteen spots been
-  uniformly that dirty it would have passed. This is the mirror of the empty-carrier
-  case below: that one is a mean near zero, this is a mean far too high. A warning
-  rather than a refusal, above roughly 0.02 AU, would have caught every bad run that
-  day and none of the good ones. Not built: the threshold wants one Gen5 opinion on a
-  high-but-consistent blank, which the remaining trial days can supply.
+- Whether Gen5 judges 280 nm as well as 260. The run that settled the reference
+  wavelength (below) had 280 at 9,77%, under the limit either way, so it cannot tell
+  the two readings apart. We judge every non-reference wavelength, which is the
+  stricter reading; if a later Gen5 run accepts a blanking whose 280 is over the
+  limit, this becomes 260 only.
 - Validation **Part F**: absolute accuracy against a reference standard. It needs a
   certified standard, not Gen5, so the trial expiry does not block it.
 - The two curve wrinkles above.
@@ -323,10 +319,78 @@ limit rather than a slightly tight one. A machine with the old key in its
 `epoch_open.json` silently falls back to the new default, which is the safe direction,
 but the stale key stays in the file until somebody opens Preferences and saves.
 
+## Side by side with Gen5, 19 November 2026
+
+A borrowed Dell carrying the last days of a Gen5 demo licence was put next to the
+Epoch, and the same loaded Take3 plate was read by both programs minutes apart. It
+is the only paired evidence this project will ever have, and it settled three
+questions that had been open since 3 November.
+
+### They agree
+
+| | Gen5 | epoch-open | apart by |
+|---|---|---|---|
+| a blanking both refused | 25,588% @ 09:33 | 26,12% @ 09:32 | 0,5 points |
+| a blanking both accepted | 6,136% @ 09:59 | 6,320% @ 10:02 | 0,18 points |
+
+Our own two reads of the one loaded plate, four minutes apart, differ by 5,8 points,
+so the gap between the programs is far inside the plate's own drift. On the accepted
+run neither discarded a well.
+
+The arithmetic matches exactly. Backing the blank out of all sixteen rows of Gen5's
+sample table — `(260 raw − 320 raw) − Gen5's 260 column` — gives one constant across
+both tubes and the whole range, in two separate report files. So Gen5 computes
+`corrected = 260 − 320` and then subtracts the mean of the kept blank wells, and
+`ng/uL = corrected × 1000` at 0,5 mm. That is `quant.py`, line for line.
+
+### Gen5 does not check whether a blank is clean
+
+It accepted a blanking of six wells sitting at **0,038 AU — about 38 ng/uL of
+nothing at all** — because their CV was 9,902%, under the limit of 10. Gen5 asks
+whether the blank wells agree with each other and never whether they are any good.
+
+The same run then reported eight spots of clean water at **−31,6 ng/uL**, and gave
+every one of them a flawless 260/280 between 1,93 and 2,05, because a ratio of two
+negative numbers is arithmetic rather than measurement. A real 20 ng/uL sample in
+that run would have been reported at −12. **The 260/280 cannot warn anybody about a
+bad blank, and looks most reassuring exactly when it is least informative.**
+
+So `BLANK_LEVEL_WARN_AU` warns and never refuses. Refusing would be stricter than
+the instrument's own software and would put the technician back where v1.2 found
+her. The number, 0,010 AU, sits in an empty gap: the two good blanks measured are
+0,0060 and 0,0063, the two bad ones 0,0359 and 0,0380.
+
+### The 320 nm reference does not vote
+
+Found by a test, not by looking. That same blanking Gen5 called VALID has a CV of
+**12,10% at 320 nm** — over the limit it had refused another blanking with twenty
+minutes earlier. No rule taking the highest CV across every wavelength can produce
+that verdict, so Gen5's rule does not take it.
+
+Ours did, which made us stricter than Gen5 on a blanking the technician could have
+used: the same shape of bug as the range limit v1.2 removed. `judged_cv()` now drops
+the reference before the verdict is made, and it is the better rule anyway — 320 nm
+is where nothing should absorb, so its mean is small and arbitrary and a CV with a
+near-zero denominator describes the denominator. The reference is still measured,
+still reported, still in the workbook.
+
+### What actually went wrong at the bench
+
+Two days of red wells, and the cause was an undated tube of contaminated water. The
+fresh aliquot, dated in marker, reads 0,0060 AU — indistinguishable from the blank
+Gen5 accepted on 26 October, 0,0063. The undated one read six times higher and
+climbing.
+
+One more thing worth keeping: with eight spots of one water and eight of another,
+**Gen5 reddened A–D at 09:33 and E–H at 09:47**, the opposite halves, on the same
+layout. There is no majority to appeal to in an 8-against-8 split and the tie breaks
+on noise. Red means "these wells disagree with the others", never "these wells are
+dirty", and no amount of work on our side can make it mean more.
+
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 449 passed as of this commit
+python3 tests/run_tests.py        # 463 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the

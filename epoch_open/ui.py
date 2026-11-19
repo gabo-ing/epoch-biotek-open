@@ -178,6 +178,9 @@ CHOSEN_INK = "#ffffff"
 EMPTY      = "#ffffff"      # an unselected well
 GOOD       = "#2e7d32"      # connected, blank done
 BAD        = "#c62828"      # simulation, blank missing
+# Amber, for something true that is neither a pass nor a refusal: a blank
+# that is valid by every rule Gen5 has and still too dirty to trust.
+WARN       = "#a35200"      # valid, but say something
 WARN_ROW   = "#fff4dc"      # a result with something to say
 WARN_INK   = "#7a4a00"
 ZEBRA      = "#f5f8fb"      # every other table row
@@ -419,6 +422,7 @@ class ScreenFit:
         style.configure("Muted.TLabel", foreground=MUTED)
         style.configure("Good.TLabel", foreground=GOOD)
         style.configure("Bad.TLabel", foreground=BAD)
+        style.configure("Warn.TLabel", foreground=WARN)
         style.configure("Head.TLabel", font=(family, pt + 3, "bold"))
 
         style.configure("Card.TLabelframe", background=PANEL,

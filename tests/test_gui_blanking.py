@@ -676,17 +676,48 @@ class TestAValidBlankWithRedWellsSaysSo:
         finally:
             app.destroy()
 
+    # A clean blanking with one well out of line. Her real wells above cannot
+    # serve here any more: they sit at 0,0262 AU, and since 19 November a
+    # blank that dirty gets a sentence of its own that outranks this one.
+    CLEAN_BUT_DIVERGENT = {"A2": 0.0, "A3": 0.0001, "B2": 0.0002,
+                           "B3": 0.0001, "C2": 0.0, "C3": 0.0040}
+
     def test_the_screen_says_so_in_words_and_names_the_wells(self):
         app = _app()
         if app is None:
             return
         try:
-            self._load(app)
+            _blanking(app, self.CLEAN_BUT_DIVERGENT)
+            assert app.blank_report.valid
+            assert app.blank_report.divergent == ("C3",)
             shown = app.blank_label.cget("text")
             assert shown, "a valid blank with red wells said nothing at all"
-            assert "A2" in shown and "A3" in shown, shown
+            assert "C3" in shown, shown
             # Not coloured as a failure: the blank passed.
             assert app.blank_label.cget("style") == "Good.TLabel"
+        finally:
+            app.destroy()
+
+    def test_her_real_blanking_now_gets_the_dirty_sentence_instead(self):
+        """The 18 November wells are valid, have two red -- and are filthy.
+
+        0,0262 AU is four times the blank Gen5 accepted on 26 October and
+        about 26 ng/uL subtracted from every sample. Nothing said so at the
+        time. The red-well sentence is the lesser news and gives way.
+        """
+        app = _app()
+        if app is None:
+            return
+        try:
+            self._load(app)
+            assert app.blank_report.valid
+            assert app.blank_report.divergent == ("A2", "A3")
+            assert app.blank_report.level_is_high()
+            shown = app.blank_label.cget("text")
+            assert "26" in shown, shown          # ng/uL, in either language
+            assert app.blank_label.cget("style") == "Warn.TLabel"
+            # Still not a refusal: Gen5 would read samples here and so do we.
+            assert app._blank_ok()
         finally:
             app.destroy()
 

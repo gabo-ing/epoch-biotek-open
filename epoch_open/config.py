@@ -12,7 +12,8 @@ executable, and every field is optional.
         "999001": {"A2": 0.5044, "A3": 0.5071}
       },
       "blank_dispersion_limit_au": 0.0025,
-      "blank_divergence_limit_au": 0.002
+      "blank_divergence_limit_au": 0.002,
+      "blank_level_warn_au": 0.010
     }
 
 reader_serial   null (the default) accepts whichever Epoch answers. Set it only
@@ -32,6 +33,12 @@ blank_divergence_limit_au
                 how far one blank well may sit from the middle of the others
                 before it is painted red as the one to wipe. It does not block
                 the read.
+blank_level_warn_au
+                how much the blank may absorb at 260 nm, after the 320 nm
+                reference is removed, before the screen says so. Default
+                0.010, about 10 ng/uL at 0.5 mm. It does not block the read:
+                Gen5 has no such check at all, and refusing here would be
+                stricter than the instrument's own software.
 
 Those two limits are this project's own, not numbers recovered from Gen5: we have
 no export of a blanking run Gen5 rejected, so there was nothing to measure them
@@ -73,6 +80,7 @@ class Config:
     reference_limit_od: float = quant.HIGH_REFERENCE_MARGIN
     blank_dispersion_limit_au: float = quant.BLANK_DISPERSION_LIMIT_AU
     blank_divergence_limit_au: float = quant.BLANK_DIVERGENCE_LIMIT_AU
+    blank_level_warn_au: float = quant.BLANK_LEVEL_WARN_AU
     # Which language the interface speaks. English by default, because a
     # stranger cannot read a Spanish dialog telling them where to change it;
     # this lab's own file says "es". Applied at startup, before any window is
@@ -128,6 +136,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         "reference_limit_od": cfg.reference_limit_od,
         "blank_dispersion_limit_au": cfg.blank_dispersion_limit_au,
         "blank_divergence_limit_au": cfg.blank_divergence_limit_au,
+        "blank_level_warn_au": cfg.blank_level_warn_au,
         "language": cfg.language,
     }
     temp = path.with_suffix(".json.tmp")
@@ -198,6 +207,8 @@ def load(path: Path | None = None) -> Config:
                                            quant.BLANK_DISPERSION_LIMIT_AU),
         blank_divergence_limit_au=positive("blank_divergence_limit_au",
                                            quant.BLANK_DIVERGENCE_LIMIT_AU),
+        blank_level_warn_au=positive("blank_level_warn_au",
+                                     quant.BLANK_LEVEL_WARN_AU),
         # Anything unrecognised falls back to the default rather than raising:
         # a typo in a hand-edited file should not stand between somebody and
         # a plate read.

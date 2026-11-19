@@ -126,6 +126,12 @@ _EN_MESSAGES = {
         "plate, load the water again and repeat the blank before reading "
         "samples: every result depends on it."
     ),
+    "blank_level": (
+        "The blank wells agree with each other, but the blank itself absorbs "
+        "{level:.4f} AU at 260 nm, about {ngul:.0f} ng/uL. Above {limit:.3f} "
+        "AU that is usually contaminated water or a plate that was not wiped, "
+        "and it is subtracted from every sample."
+    ),
     "pathlength": (
         "{well}: a pathlength of {value} mm is not credible for a Take3 well "
         "(they are about 0.5 mm). Check the value copied from the plate's "
@@ -140,6 +146,7 @@ _EN_SHORT_MESSAGES = {
     "ratio_260_230": "260/230 out of range",
     "negative": "Negative concentration",
     "blank_dispersion": "Blanks do not agree",
+    "blank_level": "Blank is absorbing",
     "pathlength": "Implausible pathlength",
 }
 
@@ -171,6 +178,12 @@ _ES_MESSAGES = {
         "cargar el agua y repite el blanco antes de leer muestras: todos los "
         "resultados dependen de esto."
     ),
+    "blank_level": (
+        "Los pozos del blanco coinciden entre si, pero el blanco mismo absorbe "
+        "{level:.4f} AU a 260 nm, unos {ngul:.0f} ng/uL. Por encima de "
+        "{limit:.3f} AU suele ser agua contaminada o una placa sin limpiar, y "
+        "se resta de cada muestra."
+    ),
     "pathlength": (
         "{well}: camino optico de {value} mm poco creible para un pozo Take3 "
         "(son de unos 0,5 mm). Revisa el valor copiado de la hoja de la placa."
@@ -191,6 +204,7 @@ _ES_SHORT_MESSAGES = {
     "ratio_260_230": "260/230 fuera de rango",
     "negative": "Concentracion negativa",
     "blank_dispersion": "Los blancos no coinciden",
+    "blank_level": "El blanco absorbe",
     "pathlength": "Camino optico poco creible",
 }
 
@@ -492,6 +506,25 @@ def blank_dispersion(blanks: dict[str, RawWell]) -> float:
     return variance ** 0.5
 
 
+def blank_level(blanks: dict[str, RawWell]) -> float:
+    """How much the blank itself absorbs: the mean of (260 - 320) across its wells.
+
+    This is the number subtracted from every sample, so it is also the error
+    put into every sample when the water is not clean. It is a different
+    question from `blank_dispersion`, which asks only whether the wells agree
+    with each other, and the two can disagree completely: sixteen spots of
+    equally filthy water agree beautifully. CV% cannot see it either, because
+    a larger mean is the denominator that makes the ratio look better.
+
+    One well is a legitimate answer here, unlike a dispersion or a CV%, so
+    there is no minimum count.
+    """
+    deltas = [b.corrected(260) for b in blanks.values() if 260 in b.readings]
+    if not deltas:
+        return 0.0
+    return sum(deltas) / len(deltas)
+
+
 # The blanking verdict, as Gen5 makes it.
 #
 # Gen5 computes a CV% for each wavelength on the RAW absorbances and refuses to
@@ -540,6 +573,34 @@ BLANK_CV_LIMIT_PERCENT = 10.0
 # on a good plate and the disagreement that ought to be caught still is. That
 # it is far out in the tail is the point: this is a floor, not the gate.
 BLANK_DISPERSION_LIMIT_AU = 0.0025
+
+
+# How absorbent the blank may be before the screen says something, measured on
+# the corrected (260 - 320) mean of the blank wells themselves.
+#
+# This is not a gate and must never become one. Gen5 does not have it: proved
+# on 19 November 2026 with its own software on this instrument, when a blank
+# made of six wells of contaminated water was accepted as VALID on a CV of
+# 9,902% while sitting at 0.038 AU -- about 38 ng/uL of nothing at all.
+# Gen5 asks one question only, whether the blank wells agree with each other,
+# and never whether they are clean. The same run then reported eight spots of
+# good water at -31,6 ng/uL, each with a flawless 260/280 between 1,93 and
+# 2,05, because a ratio of two negative numbers cannot warn anybody.
+#
+# Refusing such a blank would be stricter than the instrument's own software
+# and would put the technician back where v1.2 found her, so this only warns.
+#
+#   0.0060 AU   the clean tube, all sixteen spots, 19 November 2026, which
+#               Gen5 accepted at CV 6,136% and epoch-open at 6,320%
+#   0.0063 AU   the blanking Gen5 accepted on 26 October 2026
+#   0.0359 AU   the contaminated tube at 09:32 on 19 November 2026
+#   0.0380 AU   the same tube at 09:47, which Gen5 called VALID
+#
+# 0.010 is quiet on both good blanks with better than half again to spare and
+# loud on both bad ones by a factor of three and a half. There is no evidence
+# anywhere in the gap, so the exact placing inside it is arbitrary; what is
+# measured is that the two populations are a factor of six apart.
+BLANK_LEVEL_WARN_AU = 0.010
 
 # How far one blank well may sit from the middle of the others before it is named
 # on screen as the spot to wipe.
@@ -610,10 +671,46 @@ class BlankReport:
     cv_percent: dict[int, float]
     valid: bool
     reason: str = ""
+    # How absorbent the blank itself is. Never part of `valid`: Gen5 accepts a
+    # filthy blank that agrees with itself, and so do we. See BLANK_LEVEL_WARN_AU.
+    level_au: float = 0.0
 
     @property
     def cv_260(self) -> float:
         return self.cv_percent.get(260, 0.0)
+
+    def level_is_high(
+        self, limit_au: float = BLANK_LEVEL_WARN_AU
+    ) -> bool:
+        """Whether the blank absorbs enough to be worth a word on the screen."""
+        return self.level_au > limit_au
+
+
+def judged_cv(cv_percent: dict[int, float]) -> dict[int, float]:
+    """The CV% values the verdict is allowed to use: every one but the reference.
+
+    Gen5 excludes the 320 nm reference, and this is measured rather than
+    assumed. On 19 November 2026 Gen5 accepted a six-well blanking as VALID,
+    showing 9,902%, whose CV% at 320 nm is 12,10% -- comfortably over the
+    limit of 10 that it had just refused another blanking with. A rule taking
+    the highest CV% across all wavelengths cannot produce that verdict, so
+    Gen5's does not take it. (Gen5_LVA_NAQ_0015.html, wells E3/F3/G2/G3/H2/H3.)
+
+    It is also the better rule. 320 nm is where nothing should absorb, so its
+    mean is small and arbitrary, and a CV% with a near-zero denominator says
+    more about the denominator than about the blanking. A speck of dust on one
+    spot moves it a long way while changing the blank subtracted from a sample
+    by almost nothing. That same speck is still caught, at the wavelength
+    where it matters, by the 260 nm CV% and by the disagreement floor.
+
+    Whether Gen5 judges 280 nm as well as 260 is not settled: in that blanking
+    280 came to 9,77%, under the limit either way, so the run cannot tell them
+    apart. Every non-reference wavelength is judged here, which is the
+    stricter of the two readings and the one that keeps a 230 nm reading
+    meaningful when "also read 230 nm" is ticked.
+    """
+    return {nm: value for nm, value in cv_percent.items()
+            if nm != REFERENCE_NM}
 
 
 def wells_to_discard(
@@ -663,6 +760,7 @@ def wells_to_discard(
         cv = {w: blank_cv_percent(wells, w)
               for w in set.intersection(*(set(b.readings)
                                           for b in wells.values()))}
+        cv = judged_cv(cv)
         if cv and max(cv.values()) > cv_limit_percent:
             return False
         return blank_dispersion(wells) <= dispersion_limit_au
@@ -712,7 +810,8 @@ def blank_report(
     """
     if not blanks:
         return BlankReport(wells=(), divergent=(), dispersion_au=0.0,
-                           cv_percent={}, valid=False, reason="empty")
+                           cv_percent={}, valid=False, reason="empty",
+                           level_au=0.0)
 
     wavelengths = sorted(set.intersection(*(set(b.readings) for b in blanks.values())))
     cv = {w: blank_cv_percent(blanks, w) for w in wavelengths}
@@ -729,7 +828,8 @@ def blank_report(
     # distance-from-the-median rule -- the rule that reddens all four wells on
     # two clean spots and two smudged ones, which is the case it was retired
     # for. Caught on 18 November 2026 while reading a saved blank back.
-    failing = (bool(cv) and max(cv.values()) > cv_limit_percent) \
+    judged = judged_cv(cv)
+    failing = (bool(judged) and max(judged.values()) > cv_limit_percent) \
         or dispersion > dispersion_limit_au
     if failing:
         divergent = wells_to_discard(blanks, cv_limit_percent,
@@ -741,7 +841,7 @@ def blank_report(
         # Gen5 requires two or more wells for "use blank average", and treats a
         # CV% that cannot be calculated as a failure rather than a pass.
         reason = "single"
-    elif cv and max(cv.values()) > cv_limit_percent:
+    elif judged and max(judged.values()) > cv_limit_percent:
         reason = "cv"
     elif dispersion > dispersion_limit_au:
         reason = "dispersion"
@@ -755,6 +855,7 @@ def blank_report(
         cv_percent=cv,
         valid=not reason,
         reason=reason,
+        level_au=blank_level(blanks),
     )
 
 
@@ -762,6 +863,17 @@ def blank_report(
 def check_blanks(blanks: dict[str, RawWell]) -> list["Warning_"]:
     """Warnings about the blanks themselves, before any sample is quantified."""
     warnings: list[Warning_] = []
+    if not blanks:
+        return warnings
+
+    # A dirty blank is worth saying even when a single well was blanked, so
+    # this is checked before the two-well floor the disagreement needs.
+    level = blank_level(blanks)
+    if level > BLANK_LEVEL_WARN_AU:
+        warnings.append(warn("blank_level", level=level,
+                             ngul=to_1cm(level, DEFAULT_PATHLENGTH_MM) * 50,
+                             limit=BLANK_LEVEL_WARN_AU))
+
     if len(blanks) < 2:
         return warnings
 

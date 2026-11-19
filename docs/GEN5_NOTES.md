@@ -19,6 +19,12 @@ read, Gen5 computes a CV% for each wavelength **on the raw data**, and if the
 **highest** of those exceeds the limit -- or cannot be computed at all -- it
 warns and refuses to read samples until a valid blank exists.
 
+> **Correction, 19 November 2026.** "Each wavelength" is the help file's
+> wording and it is not quite true: the 320 nm reference is excluded. Gen5
+> accepted a blanking whose CV at 320 nm was 12,10%, twenty minutes after
+> refusing another against a limit of 10. Measured, see below. We had
+> implemented the help file's wording and were therefore stricter than Gen5.
+
 Three consequences, in order of how much they cost us:
 
 1. **There is no Gen5 constant to recover.** `docs/BLANK_THRESHOLD.md` was
@@ -214,6 +220,76 @@ mapping is still there and still refuses A1, because it answers a different
 question: not "can the optics be pointed there" but "is there a micro-spot
 there". `tests/test_plate_addressing.py` pins both.
 
+## Measured against Gen5 itself, 19 November 2026
+
+Everything above this line came from Gen5's help files and its exports. This
+section came from running Gen5 and epoch-open against the same loaded Take3
+plate, minutes apart, on the borrowed Dell in the last week of its demo
+licence. Source files: `Gen5_LVA_NAQ_0010` through `0015`, which Gen5 writes
+to `C:/ProgramData/BioTek/Temp/`.
+
+### The formula, confirmed exactly
+
+Back the blank out of Gen5's own Sample Results table, well by well:
+`(260 raw − 320 raw) − Gen5's 260 column`. Across all sixteen wells of two
+separate runs, spanning two waters six times apart in concentration, the answer
+is one constant. So:
+
+```
+corrected   = 260 raw − 320 raw
+reported    = corrected − mean(kept blank wells)
+ng/uL       = corrected × 1000          (0,5 mm pathlength, 50 ng/uL per AU)
+```
+
+The ng/uL factor was checked the other way round too: Gen5's `ng/µL ÷ 1000`
+matches its own printed `260` column to within 0,0005 AU, which is the rounding
+of a three-decimal column. This is `quant.py` exactly.
+
+### The verdict, matched on both sides
+
+| | Gen5 | epoch-open |
+|---|---|---|
+| refused | 25,588% @ 09:33 | 26,12% @ 09:32 |
+| accepted | 6,136% @ 09:59 | 6,320% @ 10:02 |
+
+0,5 and 0,18 points apart. Two epoch-open reads of the same loaded plate four
+minutes apart differ by 5,8, so the programs are closer to each other than one
+program is to itself across the plate's drift.
+
+### Gen5 has no cleanliness check at all
+
+`Gen5_LVA_NAQ_0015`: blank forced onto six wells of contaminated water,
+**0,038 AU, roughly 38 ng/uL**. Gen5: **VALID**, CV 9,902%.
+
+The same run reported eight spots of clean water at −31,6 ng/uL, each with a
+260/280 between 1,93 and 2,05 — negative over negative. Gen5 prints those
+ratios without comment, and prints −13,800 and −16,647 elsewhere in the same
+file where both corrected values are near zero. We return nothing when the
+denominator is under 1e-4, and we emit a "negative concentration" warning on
+every well where Gen5 says nothing. Both divergences are deliberate and ours
+is the better behaviour.
+
+**Consequence for us:** `BLANK_LEVEL_WARN_AU` warns, never refuses.
+
+### The reference wavelength is excluded from validation
+
+The same six wells Gen5 called VALID have CV 12,10% at 320 nm. A rule taking
+the highest CV across every wavelength cannot call that VALID against a limit
+of 10. Hence `judged_cv()`.
+
+Not settled: whether 280 nm is judged. It was 9,77% in that run, under the
+limit either way, so the observation cannot separate "260 only" from "260 and
+280 but not 320". We judge every non-reference wavelength, the stricter
+reading of the two.
+
+### Gen5's red/green is a tie-break, not a diagnosis
+
+With eight spots of one water and eight of another, Gen5 reddened **A–D at
+09:33 and E–H at 09:47** — opposite halves, same layout, fourteen minutes
+apart. In an 8-against-8 split there is no majority to appeal to and the tie
+breaks on noise. Worth knowing before trying to make our red set agree with
+Gen5's: on a bimodal blanking there is nothing to agree with.
+
 ## What is still worth doing on the trial laptop
 
 **Nothing, as of the evening of 3 November 2026.** Everything the trial could
@@ -236,6 +312,23 @@ for a proper standard.
 If the trial is opened again before it lapses, the one thing worth grabbing
 is whatever is cheap and cannot be recovered afterwards: screenshots of
 anything this project has reasoned about without seeing.
+
+**It was opened again, on 19 November 2026, and that paragraph was right.**
+The licence turned out to have a week left on a second laptop, and the
+afternoon produced the three things above that no amount of reasoning here
+could have supplied: a blanking Gen5 refused, a filthy blanking Gen5 accepted,
+and its sample arithmetic at full precision. One of them found a real bug in
+our verdict. The remaining days are worth spending the same way.
+
+Still worth grabbing before it lapses, in order:
+
+1. **The whole of `C:/ProgramData/BioTek/Temp/`.** Gen5 writes full-precision
+   HTML reports there, including blank tables. Everything above was read off
+   photographs of three-decimal columns; the files themselves are better
+   evidence and cost nothing to copy.
+2. A blanking where 280 nm is over the limit and 260 is not, to settle whether
+   280 is judged.
+3. One read with no plate in the carrier, for the empty-carrier case.
 
 ## What was done about it
 

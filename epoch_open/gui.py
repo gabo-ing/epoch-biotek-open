@@ -19,9 +19,10 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__, config, i18n, launch, take3
 from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
-                    BLANK_DISPERSION_LIMIT_AU, HIGH_REFERENCE_MARGIN, QuantError,
-                    REFERENCE_NM, blank_for, blank_report, quantify, unit_for,
-                    wavelengths_for)
+                    BLANK_DISPERSION_LIMIT_AU, BLANK_LEVEL_WARN_AU,
+                    DEFAULT_PATHLENGTH_MM, HIGH_REFERENCE_MARGIN, QuantError,
+                    REFERENCE_NM, blank_for, blank_report, judged_cv,
+                    quantify, to_1cm, unit_for, wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import blank_to_rows, export_results
 
@@ -51,6 +52,7 @@ _EN_TEXT = {
     "meta_blank_wells": "Blank wells",
     "meta_blank_cv": "Blank CV% (raw)",
     "meta_blank_dispersion": "Blank well disagreement (SD, OD)",
+    "meta_blank_level": "Blank level (260-320, OD)",
     "meta_blank_verdict": "Blank status",
     "meta_blank_discarded": "Blank wells discarded",
     "meta_blank_valid": "valid",
@@ -115,6 +117,7 @@ _EN_TEXT = {
                        "Gen5 uses 0.1."),
     "prefs_extra_group": "Settings particular to this program",
     "prefs_dispersion": "Maximum disagreement (SD, OD):",
+    "prefs_level": "Warn above blank level (OD):",
     "prefs_divergence": "Diverging well (OD):",
     "prefs_extra_help": ("Gen5 has neither of these. The disagreement limit "
                          "is a floor beneath the CV%, which is a ratio and so "
@@ -177,6 +180,11 @@ _EN_TEXT = {
                                "sit furthest from the rest (in red): wipe "
                                "those spots if you want a tighter blank, or "
                                "carry on."),
+    "blank_ok_but_dirty": ("Blank VALID -- you can read samples -- but the "
+                           "blank itself absorbs {level} AU, about "
+                           "{ngul} ng/uL, and that is subtracted from "
+                           "every one of them. Fresh water from a clean, "
+                           "dated tube, and wipe the plate."),
     "blank_why_pending": "Some wells are still unread (in blue).",
     "blank_why_empty": "No blank wells are left.",
     "blank_not_valid": ("The blank is not valid yet. Correct it before "
@@ -230,6 +238,7 @@ _ES_TEXT = {
     "meta_blank_wells": "Pozos del blanco",
     "meta_blank_cv": "CV% del blanco (bruto)",
     "meta_blank_dispersion": "Discrepancia entre pozos (DE, DO)",
+    "meta_blank_level": "Nivel del blanco (260-320, DO)",
     "meta_blank_verdict": "Estado del blanco",
     "meta_blank_discarded": "Pozos de blanco descartados",
     "meta_blank_valid": "valido",
@@ -295,6 +304,7 @@ _ES_TEXT = {
                        "usa 0,1."),
     "prefs_extra_group": "Ajustes propios de este programa",
     "prefs_dispersion": "Discrepancia maxima (DE, DO):",
+    "prefs_level": "Avisar sobre nivel de blanco (DO):",
     "prefs_divergence": "Pozo divergente (DO):",
     "prefs_extra_help": ("Gen5 no tiene estos dos. El limite de discrepancia "
                          "es un suelo por debajo del CV%, que es una razon y "
@@ -357,6 +367,11 @@ _ES_TEXT = {
                                "{wells} son los que mas se alejan del resto "
                                "(en rojo): limpia esos puntos si quieres un "
                                "blanco mas ajustado, o sigue adelante."),
+    "blank_ok_but_dirty": ("Blanco VALIDO: ya puedes leer muestras, pero el "
+                           "blanco mismo absorbe {level} AU, unos {ngul} "
+                           "ng/uL, y eso se resta de todas ellas. Usa agua "
+                           "nueva de un tubo limpio y fechado, y limpia la "
+                           "placa."),
     "blank_why_pending": "Faltan pozos por leer (en azul).",
     "blank_why_empty": "No queda ningun pozo de blanco.",
     "blank_not_valid": ("El blanco no es valido todavia. Arreglalo antes de leer "
@@ -917,7 +932,9 @@ class App(ScreenFit, tk.Tk):
         she had been hitting, there was no way to tell from the screen either.
         Both now carry the measured value and the limit it passed.
         """
-        cv = self.blank_report.cv_percent
+        # The wavelength named has to be one the verdict was actually made
+        # on, or the sentence points at a number that did not refuse her.
+        cv = judged_cv(self.blank_report.cv_percent)
         nm = max(cv, key=cv.get) if cv else REFERENCE_NM
         return TEXT["blank_why_cv"].format(
             cv=_Decimal(cv.get(nm, 0.0)), nm=nm,
@@ -952,6 +969,11 @@ class App(ScreenFit, tk.Tk):
             TEXT["meta_blank_cv"]: cv,
             TEXT["meta_blank_dispersion"]:
                 f"{_Decimal(report.dispersion_au):.5f}",
+            # What was subtracted from every sample in this batch. Recorded
+            # because a blank can be valid by every rule Gen5 has and still
+            # be dirty enough to make every number in the file wrong.
+            TEXT["meta_blank_level"]:
+                f"{_Decimal(report.level_au):.5f}",
             TEXT["meta_blank_verdict"]: (TEXT["meta_blank_valid"]
                                          if report.valid
                                          else TEXT["meta_blank_invalid"]),
@@ -1025,7 +1047,23 @@ class App(ScreenFit, tk.Tk):
             # VALID -- but nothing on the screen connected the two, and the
             # first technician to meet it asked whether a red well could be
             # used at all. It can. Asked at the bench, 18 November 2026.
-            if self.blank_report and self.blank_report.divergent:
+            # A dirty blank outranks a red well. Both are "valid, but": the
+            # red well costs a fraction of one well's contribution, while a
+            # dirty blank is subtracted whole from every sample. Gen5 says
+            # nothing at all here -- proved on 19 November 2026, when it
+            # accepted a blank at 0.038 AU and then reported clean water at
+            # -31,6 ng/uL with a flawless 260/280 on every well.
+            if self.blank_report and self.blank_report.level_is_high(
+                    CONFIG.blank_level_warn_au):
+                level = self.blank_report.level_au
+                self.blank_label.configure(
+                    text=TEXT["blank_ok_but_dirty"].format(
+                        level=f"{_Decimal(level):.4f}",
+                        ngul=f"{_Decimal(to_1cm(level, DEFAULT_PATHLENGTH_MM) * 50):.0f}"),
+                    # Amber: the blank passed, so red would contradict the
+                    # VALID beside it, but green would be a lie.
+                    style="Warn.TLabel")
+            elif self.blank_report and self.blank_report.divergent:
                 self.blank_label.configure(
                     text=TEXT["blank_ok_but_divergent"].format(
                         wells=", ".join(self.blank_report.divergent)),
@@ -1086,6 +1124,7 @@ class App(ScreenFit, tk.Tk):
         CONFIG.reference_limit_od = dialog.result["ref_limit"]
         CONFIG.blank_dispersion_limit_au = dialog.result["dispersion"]
         CONFIG.blank_divergence_limit_au = dialog.result["divergence"]
+        CONFIG.blank_level_warn_au = dialog.result["level"]
         # Stored, not applied live: every widget on screen already copied its
         # text. Saying so is the whole of the behaviour here.
         CONFIG.language = dialog.result.get("language", CONFIG.language)
@@ -1588,6 +1627,8 @@ class PreferencesDialog(tk.Toplevel):
                   config.blank_dispersion_limit_au)
         self._row(extra, "divergence", TEXT["prefs_divergence"],
                   config.blank_divergence_limit_au)
+        self._row(extra, "level", TEXT["prefs_level"],
+                  config.blank_level_warn_au)
         ttk.Label(extra, text=TEXT["prefs_extra_help"],
                   wraplength=self.px(390),
                   style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
@@ -1664,7 +1705,8 @@ class PreferencesDialog(tk.Toplevel):
         for key, label in (("cv", TEXT["prefs_cv"]),
                            ("ref_limit", TEXT["prefs_ref_limit"]),
                            ("dispersion", TEXT["prefs_dispersion"]),
-                           ("divergence", TEXT["prefs_divergence"])):
+                           ("divergence", TEXT["prefs_divergence"]),
+                           ("level", TEXT["prefs_level"])):
             value = self._number(key, label)
             if value is None:
                 return
