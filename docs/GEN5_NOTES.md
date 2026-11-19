@@ -19,11 +19,12 @@ read, Gen5 computes a CV% for each wavelength **on the raw data**, and if the
 **highest** of those exceeds the limit -- or cannot be computed at all -- it
 warns and refuses to read samples until a valid blank exists.
 
-> **Correction, 19 November 2026.** "Each wavelength" is the help file's
-> wording and it is not quite true: the 320 nm reference is excluded. Gen5
-> accepted a blanking whose CV at 320 nm was 12,10%, twenty minutes after
-> refusing another against a limit of 10. Measured, see below. We had
-> implemented the help file's wording and were therefore stricter than Gen5.
+> **Confirmed against Gen5's own output, 19 November 2026.** "Each
+> wavelength" includes the 320 nm reference. In `Gen5_LVA_NAQ_0014` the
+> blanking Gen5 called VALID has CV 260: 6,05, 280: 6,8, 320: 9,9, and the
+> 9,9 is both the highest of the three and the figure the screen displayed
+> as the verdict. A draft that afternoon briefly concluded the opposite; see
+> below for how, because the way it went wrong is worth keeping.
 
 Three consequences, in order of how much they cost us:
 
@@ -258,8 +259,9 @@ program is to itself across the plate's drift.
 
 ### Gen5 has no cleanliness check at all
 
-`Gen5_LVA_NAQ_0015`: blank forced onto six wells of contaminated water,
-**0,038 AU, roughly 38 ng/uL**. Gen5: **VALID**, CV 9,902%.
+`Gen5_LVA_NAQ_0014`, the Blank Results table itself: blank forced onto six
+wells of contaminated water, **0,0382 AU, roughly 38 ng/uL**. Gen5: **VALID**,
+CV 9,902%. The sample read that used it is `0015`.
 
 The same run reported eight spots of clean water at −31,6 ng/uL, each with a
 260/280 between 1,93 and 2,05 — negative over negative. Gen5 prints those
@@ -271,16 +273,27 @@ is the better behaviour.
 
 **Consequence for us:** `BLANK_LEVEL_WARN_AU` warns, never refuses.
 
-### The reference wavelength is excluded from validation
+### The reference wavelength is judged -- and how we briefly thought otherwise
 
-The same six wells Gen5 called VALID have CV 12,10% at 320 nm. A rule taking
-the highest CV across every wavelength cannot call that VALID against a limit
-of 10. Hence `judged_cv()`.
+The screen for the 09:47:48 blanking said VALID, CV 9,902%. Reading the 320 nm
+values for its six kept wells out of `Gen5_LVA_NAQ_0015` gave a CV of 12,10%,
+over the limit of 10. The only rule consistent with that pair is one that
+excludes the reference, so `judged_cv()` was written, tested, committed and
+pushed.
 
-Not settled: whether 280 nm is judged. It was 9,77% in that run, under the
-limit either way, so the observation cannot separate "260 only" from "260 and
-280 but not 320". We judge every non-reference wavelength, the stricter
-reading of the two.
+`0015` is the **sample** read, at 09:51:58. The blanking was read at 09:47:48
+and its Blank Results table is in `0014`, which prints 320: 9,9 -- under the
+limit, the highest of the three, and precisely the 9,902% on the screen. Two
+different reads of the same spots. Reverted the same afternoon, as soon as the
+HTML files were copied off the laptop.
+
+Nothing about blanking follows from this. What follows is about evidence: every
+Gen5 number this project had until then came off a photograph of a
+three-decimal column, and in a photograph a sample table and a blank table look
+identical. The reports name which is which. **Prefer the file.**
+
+Not separately settled, and no longer interesting: whether 280 nm is judged. It
+is, by the same rule.
 
 ### Gen5's red/green is a tie-break, not a diagnosis
 
@@ -320,15 +333,18 @@ could have supplied: a blanking Gen5 refused, a filthy blanking Gen5 accepted,
 and its sample arithmetic at full precision. One of them found a real bug in
 our verdict. The remaining days are worth spending the same way.
 
-Still worth grabbing before it lapses, in order:
+`C:/ProgramData/BioTek/Temp/` was copied to `/home/gabo/epoch` the same
+morning, fifteen reports, `0001` through `0015`. That folder is now the best
+evidence this project has about Gen5 and it immediately overturned a conclusion
+drawn from photographs of the same runs. Its Blank Results tables print the
+kept wells plain and the discarded wells between asterisks, which is how the
+red/green sets above were recovered.
 
-1. **The whole of `C:/ProgramData/BioTek/Temp/`.** Gen5 writes full-precision
-   HTML reports there, including blank tables. Everything above was read off
-   photographs of three-decimal columns; the files themselves are better
-   evidence and cost nothing to copy.
-2. A blanking where 280 nm is over the limit and 260 is not, to settle whether
-   280 is judged.
-3. One read with no plate in the carrier, for the empty-carrier case.
+Still worth grabbing before the licence lapses:
+
+1. One read with no plate in the carrier, for the empty-carrier case.
+2. A blanking Gen5 refuses, with its report saved -- every file here is a run
+   that went on to read samples, so the refusals are still only screenshots.
 
 ## What was done about it
 

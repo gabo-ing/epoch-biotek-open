@@ -523,66 +523,61 @@ class TestTheBlankSheet:
 
 
 class TestTheBlankCanBeValidAndStillBeFilthy:
-    """19 November 2026, with Gen5's demo licence on the borrowed Dell.
+    """Gen5 does not check whether a blank is clean, only whether it agrees.
 
-    The question this answers had been open since 3 November: does Gen5 check
-    how clean a blank is, or only whether its wells agree? It only checks
-    agreement. Gen5 accepted a blank of six wells of contaminated water at CV
-    9,902%, sitting at 0,038 AU, and then reported eight spots of good water
-    at -31,6 ng/uL -- each with a 260/280 between 1,93 and 2,05, because a
-    ratio of two negative numbers is arithmetic rather than measurement.
+    Gen5_LVA_NAQ_0014, 19 November 2026: a blanking of six wells of
+    contaminated water, 0,0382 AU corrected -- about 38 ng/uL of nothing at
+    all -- which Gen5 accepted as VALID. The sample read that followed it,
+    0015, reported eight spots of good water at -31,6 ng/uL, each with a
+    flawless 260/280 between 1,93 and 2,05, because a ratio of two negative
+    numbers is arithmetic rather than measurement. A real 20 ng/uL sample in
+    that run would have been reported at -12.
 
     So epoch-open warns and does not refuse. Refusing would be stricter than
-    the instrument's own software, and would put the technician back where
+    the instrument's own software and would put the technician back where
     v1.2 found her: unable to read a plate Gen5 would have read.
 
-    The numbers below are measured, off Gen5_LVA_NAQ_0015.html and the
-    epoch-open exports of the same morning.
+    All numbers below are Gen5's own Blank Results tables, which print the
+    wells it kept unmarked and the wells it discarded between asterisks.
     """
 
-    # The clean tube, all sixteen spots. Gen5 VALID at 6,136%, epoch-open at
-    # 6,320%, neither discarding a well. (260, 320) raw.
-    CLEAN = [
-        (0.0535, 0.0467), (0.0548, 0.0486), (0.0458, 0.0404), (0.0444, 0.0384),
-        (0.0473, 0.0417), (0.0474, 0.0404), (0.0483, 0.0415), (0.0458, 0.0405),
-        (0.0510, 0.0441), (0.0451, 0.0385), (0.0488, 0.0429), (0.0447, 0.0384),
-        (0.0466, 0.0410), (0.0462, 0.0415), (0.0472, 0.0402), (0.0463, 0.0396),
-    ]
-    # The six wells of the contaminated tube that Gen5 kept and called VALID.
-    DIRTY = [(0.064, 0.039), (0.068, 0.042), (0.067, 0.041),
-             (0.083, 0.053), (0.070, 0.041), (0.069, 0.040)]
+    # 0014, the six wells Gen5 kept. (260, 280, 320) raw.
+    DIRTY = {
+        "E3": (0.075, 0.058, 0.039), "F3": (0.080, 0.061, 0.042),
+        "G2": (0.078, 0.061, 0.042), "G3": (0.090, 0.070, 0.050),
+        "H2": (0.081, 0.061, 0.041), "H3": (0.079, 0.060, 0.040),
+    }
+    # 0012, the same blank read, kept the other way round: the dated tube.
+    CLEAN = {
+        "A2": (0.052, 0.049, 0.046), "A3": (0.052, 0.048, 0.045),
+        "B2": (0.048, 0.046, 0.042), "B3": (0.043, 0.041, 0.038),
+        "C2": (0.047, 0.044, 0.041), "C3": (0.045, 0.042, 0.039),
+        "D2": (0.051, 0.048, 0.044), "D3": (0.045, 0.042, 0.039),
+    }
 
-    def _wells(self, rows):
-        return {f"W{i}": quant.RawWell(well=f"W{i}",
-                                       readings={260: a, 320: b})
-                for i, (a, b) in enumerate(rows)}
+    def _wells(self, data):
+        return {name: quant.RawWell(
+            well=name, readings={260: v[0], 280: v[1], 320: v[2]})
+            for name, v in data.items()}
 
-    def test_the_clean_tube_is_quiet(self):
+    def test_the_dated_tube_is_quiet(self):
         report = quant.blank_report(self._wells(self.CLEAN))
-        assert report.valid
-        assert abs(report.level_au - 0.0062) < 0.0002, report.level_au
+        assert report.valid, report.reason
+        assert abs(report.level_au - 0.0061) < 0.0005, report.level_au
         assert not report.level_is_high()
         assert quant.check_blanks(self._wells(self.CLEAN)) == []
 
-    def test_the_clean_tube_matches_gen5_on_the_same_plate(self):
-        """Gen5 said 6,136% at 09:59:04; this is 10:02:36 on the same load."""
-        report = quant.blank_report(self._wells(self.CLEAN))
-        assert abs(report.cv_260 - 6.136) < 0.5, report.cv_260
-        assert report.divergent == ()
-
-    def test_the_dirty_tube_is_valid_exactly_as_gen5_said(self):
-        """Gen5's verdict on these six wells was VALID at CV 9,902%."""
+    def test_the_contaminated_tube_is_valid_exactly_as_gen5_said(self):
         report = quant.blank_report(self._wells(self.DIRTY))
         assert report.valid, report.reason
-        assert report.cv_260 < quant.BLANK_CV_LIMIT_PERCENT
-        # Our disagreement floor does not catch it either: these wells agree
-        # with each other perfectly well. They are simply dirty.
+        # And our disagreement floor does not catch it either: these wells
+        # agree with each other perfectly well. They are simply dirty.
         assert report.dispersion_au < quant.BLANK_DISPERSION_LIMIT_AU
 
-    def test_the_dirty_tube_is_warned_about_all_the_same(self):
+    def test_the_contaminated_tube_is_warned_about_all_the_same(self):
         report = quant.blank_report(self._wells(self.DIRTY))
         assert report.level_is_high()
-        assert abs(report.level_au - 0.0275) < 0.001, report.level_au
+        assert abs(report.level_au - 0.0382) < 0.0005, report.level_au
         codes = [w.code for w in quant.check_blanks(self._wells(self.DIRTY))]
         assert "blank_level" in codes
 
@@ -590,12 +585,11 @@ class TestTheBlankCanBeValidAndStillBeFilthy:
         """The sentence has to say what it means in the unit she works in."""
         warnings = quant.check_blanks(self._wells(self.DIRTY))
         message = next(w.message for w in warnings if w.code == "blank_level")
-        assert "27" in message or "28" in message, message
+        assert "38" in message, message
 
     def test_a_dirty_blank_never_blocks_the_read(self):
-        """The whole point. Gen5 would read these samples, so we must too."""
-        for rows in (self.DIRTY, self.CLEAN):
-            assert quant.blank_report(self._wells(rows)).valid
+        """The whole point. Gen5 read samples against this one, so we must."""
+        assert quant.blank_report(self._wells(self.DIRTY)).valid
 
     def test_one_well_is_enough_to_judge_the_level(self):
         """Unlike a CV% or a standard deviation, a mean of one is meaningful."""
@@ -605,62 +599,72 @@ class TestTheBlankCanBeValidAndStillBeFilthy:
         codes = [w.code for w in quant.check_blanks(single)]
         assert "blank_level" in codes
 
-    def test_the_limit_sits_between_the_two_populations(self):
-        """Measured, not chosen: the good and bad blanks are 6x apart."""
-        good = (0.0060, 0.0063)
-        bad = (0.0359, 0.0380)
-        assert max(good) < quant.BLANK_LEVEL_WARN_AU < min(bad)
+    def test_the_limit_clears_every_blanking_anyone_worked_from(self):
+        """Measured off Gen5's Blank Results tables, not chosen.
+
+        The worked blanks run in a continuum to 0,0150 -- eleven wells drawn
+        from both tubes at once, 0010 -- with the contaminated one far above
+        it. An earlier draft put the limit at 0,010 on the strength of two
+        blankings and would have warned about three good ones.
+        """
+        worked = (0.0061, 0.0063, 0.0080, 0.0100, 0.0120, 0.0150)
+        contaminated = (0.0359, 0.0382)
+        assert max(worked) < quant.BLANK_LEVEL_WARN_AU < min(contaminated)
 
 
-class TestTheReferenceWavelengthDoesNotVoteOnTheVerdict:
-    """Gen5 excludes 320 nm from validation, and we had not.
+class TestTheReferenceWavelengthIsJudgedToo:
+    """Gen5 takes the highest CV across every wavelength, 320 nm included.
 
-    Measured on 19 November 2026. Gen5 accepted a six-well blanking as VALID,
-    displaying 9,902%, minutes after refusing another at 25,588% against the
-    same limit of 10. The CV% of those six wells at 320 nm is 12,10%. No rule
-    that takes the highest CV% across every wavelength can call that VALID, so
-    Gen5's rule does not take it -- and ours did, which made us stricter than
-    the instrument's own software on a blanking the technician could have used.
+    Worth a test of its own because this project got it wrong first. On
+    19 November 2026 the screen showed VALID at CV 9,902% for the blanking of
+    09:47:48, and a draft concluded from that that Gen5 must exclude the
+    reference -- the 320 nm CV of those six wells looked like 12,10%.
 
-    This is the same shape of bug as the range limit v1.2 removed: a gate that
-    refuses work Gen5 would have allowed, for a reason that is not about
-    whether the blank is any good.
+    It was not. That 12,10% came from Gen5_LVA_NAQ_0015, which is the SAMPLE
+    read at 09:51:58, not the blank read at 09:47:48. Gen5's own Blank
+    Results table for the blanking, 0014, prints 260: 6,05, 280: 6,8,
+    320: 9,9 -- and 9,9 is the highest of the three, which is exactly the
+    9,902% the screen displayed as the verdict. The reference was never
+    excluded; two different reads of the same spots were being compared.
+
+    The lesson is about evidence, not about blanking: a value read off the
+    wrong table is not weaker evidence, it is evidence for a different thing.
     """
 
-    # Gen5_LVA_NAQ_0015.html, wells E3/F3/G2/G3/H2/H3, as Gen5 printed them.
-    GEN5_ACCEPTED = {
-        "E3": (0.064, 0.051, 0.039), "F3": (0.068, 0.055, 0.042),
-        "G2": (0.067, 0.055, 0.041), "G3": (0.083, 0.067, 0.053),
-        "H2": (0.070, 0.056, 0.041), "H3": (0.069, 0.054, 0.040),
+    # Gen5_LVA_NAQ_0014, the six wells it kept, from its Blank Results table.
+    KEPT = {
+        "E3": (0.075, 0.058, 0.039), "F3": (0.080, 0.061, 0.042),
+        "G2": (0.078, 0.061, 0.042), "G3": (0.090, 0.070, 0.050),
+        "H2": (0.081, 0.061, 0.041), "H3": (0.079, 0.060, 0.040),
     }
 
     def _wells(self):
         return {name: quant.RawWell(
             well=name, readings={260: v[0], 280: v[1], 320: v[2]})
-            for name, v in self.GEN5_ACCEPTED.items()}
+            for name, v in self.KEPT.items()}
 
-    def test_the_reference_really_is_over_the_limit(self):
-        """If this ever stops being true the test below proves nothing."""
-        cv = quant.blank_cv_percent(self._wells(), quant.REFERENCE_NM)
-        assert cv > quant.BLANK_CV_LIMIT_PERCENT, cv
-
-    def test_and_the_blanking_is_valid_anyway_as_gen5_said(self):
+    def test_the_reference_carries_the_highest_cv_here(self):
+        """Which is what makes this blanking able to tell us anything."""
         report = quant.blank_report(self._wells())
+        highest = max(report.cv_percent, key=report.cv_percent.get)
+        assert highest == quant.REFERENCE_NM, report.cv_percent
+
+    def test_and_it_is_under_the_limit_so_the_blanking_passes(self):
+        report = quant.blank_report(self._wells())
+        assert report.cv_percent[quant.REFERENCE_NM] < \
+            quant.BLANK_CV_LIMIT_PERCENT
         assert report.valid, report.reason
 
-    def test_the_reference_is_still_measured_and_reported(self):
-        """Excluded from the verdict, not hidden: it goes in the workbook."""
-        report = quant.blank_report(self._wells())
-        assert quant.REFERENCE_NM in report.cv_percent
-
-    def test_judged_cv_drops_only_the_reference(self):
-        judged = quant.judged_cv({230: 1.0, 260: 2.0, 280: 3.0, 320: 99.0})
-        assert judged == {230: 1.0, 260: 2.0, 280: 3.0}
-
-    def test_a_peak_over_the_limit_still_refuses(self):
-        """Excluding the reference must not excuse the wavelength that counts."""
-        wells = {name: quant.RawWell(well=name, readings={260: a, 320: 0.040})
-                 for name, a in (("A2", 0.050), ("A3", 0.090), ("B2", 0.052))}
+    def test_a_reference_over_the_limit_refuses_the_blanking(self):
+        """The rule itself: 320 nm votes like any other wavelength."""
+        wells = {
+            "A2": quant.RawWell(well="A2", readings={260: 0.050, 320: 0.030}),
+            "A3": quant.RawWell(well="A3", readings={260: 0.051, 320: 0.045}),
+            "B2": quant.RawWell(well="B2", readings={260: 0.050, 320: 0.031}),
+        }
         report = quant.blank_report(wells)
+        assert report.cv_percent[260] < quant.BLANK_CV_LIMIT_PERCENT
+        assert report.cv_percent[quant.REFERENCE_NM] > \
+            quant.BLANK_CV_LIMIT_PERCENT
         assert not report.valid
         assert report.reason == "cv"

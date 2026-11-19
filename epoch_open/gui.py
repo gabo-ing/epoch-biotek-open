@@ -21,8 +21,8 @@ from . import __version__, config, i18n, launch, take3
 from .quant import (BLANK_CV_LIMIT_PERCENT, BLANK_DIVERGENCE_LIMIT_AU,
                     BLANK_DISPERSION_LIMIT_AU, BLANK_LEVEL_WARN_AU,
                     DEFAULT_PATHLENGTH_MM, HIGH_REFERENCE_MARGIN, QuantError,
-                    REFERENCE_NM, blank_for, blank_report, judged_cv,
-                    quantify, to_1cm, unit_for, wavelengths_for)
+                    REFERENCE_NM, blank_for, blank_report, quantify, to_1cm,
+                    unit_for, wavelengths_for)
 from .reader import EpochReader, MockReader, ReaderError, ReaderInfo
 from .xlsx import blank_to_rows, export_results
 
@@ -932,9 +932,7 @@ class App(ScreenFit, tk.Tk):
         she had been hitting, there was no way to tell from the screen either.
         Both now carry the measured value and the limit it passed.
         """
-        # The wavelength named has to be one the verdict was actually made
-        # on, or the sentence points at a number that did not refuse her.
-        cv = judged_cv(self.blank_report.cv_percent)
+        cv = self.blank_report.cv_percent
         nm = max(cv, key=cv.get) if cv else REFERENCE_NM
         return TEXT["blank_why_cv"].format(
             cv=_Decimal(cv.get(nm, 0.0)), nm=nm,

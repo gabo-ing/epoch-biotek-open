@@ -132,11 +132,14 @@ than the Spanish precisely so that it would.
 
 ## Still open
 
-- Whether Gen5 judges 280 nm as well as 260. The run that settled the reference
-  wavelength (below) had 280 at 9,77%, under the limit either way, so it cannot tell
-  the two readings apart. We judge every non-reference wavelength, which is the
-  stricter reading; if a later Gen5 run accepts a blanking whose 280 is over the
-  limit, this becomes 260 only.
+- **We refuse a one-well blanking and Gen5 does not.** `Gen5_LVA_NAQ_0003` and `0005`
+  are single-well blankings from 26 October that Gen5 quantified against — 0003
+  reports samples at 436 and 440 ng/uL — and their Blank Results tables carry no CV
+  column at all. Gen5 has nothing to validate with one well, so it validates nothing
+  and uses it. Ours says `reason = "single"` and stops. Deliberately left alone: which
+  is better is a judgement, not a fact. A single blank well has no cross-check of any
+  kind, and this lab's commonest blanking is two. Someone's call, not a bug to fix
+  quietly.
 - Validation **Part F**: absolute accuracy against a reference standard. It needs a
   certified standard, not Gen5, so the trial expiry does not block it.
 - The two curve wrinkles above.
@@ -357,22 +360,35 @@ bad blank, and looks most reassuring exactly when it is least informative.**
 
 So `BLANK_LEVEL_WARN_AU` warns and never refuses. Refusing would be stricter than
 the instrument's own software and would put the technician back where v1.2 found
-her. The number, 0,010 AU, sits in an empty gap: the two good blanks measured are
-0,0060 and 0,0063, the two bad ones 0,0359 and 0,0380.
+her.
 
-### The 320 nm reference does not vote
+The number is 0,020 AU. Every blanking Gen5 has recorded in this lab, taken as
+the corrected mean of the wells it actually kept: 0,0061 and 0,0063 (the dated
+tube and October's), 0,0080 twice, 0,0100, 0,0120, 0,0150 (eleven wells drawn
+from both tubes at once), and 0,0382 (contaminated). A continuum up to 0,0150
+and then one real outlier. 0,020 is the only placing that stays quiet on every
+blanking anyone has worked from. A first draft said 0,010 on the strength of
+two of them and would have warned about three good ones.
 
-Found by a test, not by looking. That same blanking Gen5 called VALID has a CV of
-**12,10% at 320 nm** — over the limit it had refused another blanking with twenty
-minutes earlier. No rule taking the highest CV across every wavelength can produce
-that verdict, so Gen5's rule does not take it.
+### The 320 nm reference is judged like any other wavelength
 
-Ours did, which made us stricter than Gen5 on a blanking the technician could have
-used: the same shape of bug as the range limit v1.2 removed. `judged_cv()` now drops
-the reference before the verdict is made, and it is the better rule anyway — 320 nm
-is where nothing should absorb, so its mean is small and arbitrary and a CV with a
-near-zero denominator describes the denominator. The reference is still measured,
-still reported, still in the workbook.
+This one we got wrong first, and the correction is worth more than the fact.
+
+The screen showed VALID at CV 9,902% for the blanking of 09:47:48. The 320 nm
+CV of those six wells looked like 12,10%, over the limit of 10, so a draft
+concluded that Gen5 must exclude the reference — and `judged_cv()` was written,
+tested and committed on that basis.
+
+It was wrong. The 12,10% came from `Gen5_LVA_NAQ_0015`, which is the **sample**
+read at 09:51:58. The blanking was read at 09:47:48, and its own Blank Results
+table, `0014`, prints 260: 6,05, 280: 6,8, **320: 9,9** — the highest of the
+three, and exactly the 9,902% the screen displayed as its verdict. Two different
+reads of the same spots were being compared. Reverted; the rule is the help
+file's rule after all, reference included.
+
+The mistake was only possible because everything until then had been read off
+photographs of three-decimal columns, where a sample table and a blank table
+look alike. The HTML reports settle it in one line. **Prefer the file.**
 
 ### What actually went wrong at the bench
 
@@ -390,7 +406,7 @@ dirty", and no amount of work on our side can make it mean more.
 ## Running the tests
 
 ```
-python3 tests/run_tests.py        # 463 passed as of this commit
+python3 tests/run_tests.py        # 460 passed as of this commit
 ```
 
 One trap, learned the hard way: **the GUI tests return early with no display and the

@@ -578,29 +578,34 @@ BLANK_DISPERSION_LIMIT_AU = 0.0025
 # How absorbent the blank may be before the screen says something, measured on
 # the corrected (260 - 320) mean of the blank wells themselves.
 #
-# This is not a gate and must never become one. Gen5 does not have it: proved
-# on 19 November 2026 with its own software on this instrument, when a blank
-# made of six wells of contaminated water was accepted as VALID on a CV of
-# 9,902% while sitting at 0.038 AU -- about 38 ng/uL of nothing at all.
-# Gen5 asks one question only, whether the blank wells agree with each other,
-# and never whether they are clean. The same run then reported eight spots of
-# good water at -31,6 ng/uL, each with a flawless 260/280 between 1,93 and
-# 2,05, because a ratio of two negative numbers cannot warn anybody.
+# This is not a gate and must never become one. Gen5 does not have it. On
+# 19 November 2026 it accepted a blanking of six wells of contaminated water,
+# Gen5_LVA_NAQ_0014, sitting at 0,0382 AU -- about 38 ng/uL of nothing at all
+# -- because its CV% passed. Gen5 asks whether the blank wells agree with each
+# other and never whether they are clean. The run that followed, 0015, then
+# reported eight spots of good water at -31,6 ng/uL, each with a flawless
+# 260/280 between 1,93 and 2,05, because a ratio of two negative numbers
+# cannot warn anybody.
 #
 # Refusing such a blank would be stricter than the instrument's own software
 # and would put the technician back where v1.2 found her, so this only warns.
 #
-#   0.0060 AU   the clean tube, all sixteen spots, 19 November 2026, which
-#               Gen5 accepted at CV 6,136% and epoch-open at 6,320%
-#   0.0063 AU   the blanking Gen5 accepted on 26 October 2026
-#   0.0359 AU   the contaminated tube at 09:32 on 19 November 2026
-#   0.0380 AU   the same tube at 09:47, which Gen5 called VALID
+# Every blanking Gen5 recorded in this lab, as the corrected mean of the wells
+# it actually kept, read out of its own Blank Results tables:
 #
-# 0.010 is quiet on both good blanks with better than half again to spare and
-# loud on both bad ones by a factor of three and a half. There is no evidence
-# anywhere in the gap, so the exact placing inside it is arbitrary; what is
-# measured is that the two populations are a factor of six apart.
-BLANK_LEVEL_WARN_AU = 0.010
+#   0.0061 AU   0012, the dated tube, 19 November
+#   0.0063 AU   0001, the blanking of 26 October
+#   0.0080 AU   0003 and 0005, single-well blanks
+#   0.0100 AU   0008
+#   0.0120 AU   0006
+#   0.0150 AU   0010, eleven wells drawn from both tubes at once
+#   0.0382 AU   0014, the contaminated tube
+#
+# 0.020 is the only placing that stays quiet on every blanking anyone has
+# worked from and speaks on the contaminated one. An earlier draft said 0.010
+# on the strength of two blankings; the full set shows a continuum up to
+# 0.0150 with the one real outlier far above it.
+BLANK_LEVEL_WARN_AU = 0.020
 
 # How far one blank well may sit from the middle of the others before it is named
 # on screen as the spot to wipe.
@@ -686,33 +691,6 @@ class BlankReport:
         return self.level_au > limit_au
 
 
-def judged_cv(cv_percent: dict[int, float]) -> dict[int, float]:
-    """The CV% values the verdict is allowed to use: every one but the reference.
-
-    Gen5 excludes the 320 nm reference, and this is measured rather than
-    assumed. On 19 November 2026 Gen5 accepted a six-well blanking as VALID,
-    showing 9,902%, whose CV% at 320 nm is 12,10% -- comfortably over the
-    limit of 10 that it had just refused another blanking with. A rule taking
-    the highest CV% across all wavelengths cannot produce that verdict, so
-    Gen5's does not take it. (Gen5_LVA_NAQ_0015.html, wells E3/F3/G2/G3/H2/H3.)
-
-    It is also the better rule. 320 nm is where nothing should absorb, so its
-    mean is small and arbitrary, and a CV% with a near-zero denominator says
-    more about the denominator than about the blanking. A speck of dust on one
-    spot moves it a long way while changing the blank subtracted from a sample
-    by almost nothing. That same speck is still caught, at the wavelength
-    where it matters, by the 260 nm CV% and by the disagreement floor.
-
-    Whether Gen5 judges 280 nm as well as 260 is not settled: in that blanking
-    280 came to 9,77%, under the limit either way, so the run cannot tell them
-    apart. Every non-reference wavelength is judged here, which is the
-    stricter of the two readings and the one that keeps a 230 nm reading
-    meaningful when "also read 230 nm" is ticked.
-    """
-    return {nm: value for nm, value in cv_percent.items()
-            if nm != REFERENCE_NM}
-
-
 def wells_to_discard(
     blanks: dict[str, RawWell],
     cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
@@ -760,7 +738,6 @@ def wells_to_discard(
         cv = {w: blank_cv_percent(wells, w)
               for w in set.intersection(*(set(b.readings)
                                           for b in wells.values()))}
-        cv = judged_cv(cv)
         if cv and max(cv.values()) > cv_limit_percent:
             return False
         return blank_dispersion(wells) <= dispersion_limit_au
@@ -828,8 +805,7 @@ def blank_report(
     # distance-from-the-median rule -- the rule that reddens all four wells on
     # two clean spots and two smudged ones, which is the case it was retired
     # for. Caught on 18 November 2026 while reading a saved blank back.
-    judged = judged_cv(cv)
-    failing = (bool(judged) and max(judged.values()) > cv_limit_percent) \
+    failing = (bool(cv) and max(cv.values()) > cv_limit_percent) \
         or dispersion > dispersion_limit_au
     if failing:
         divergent = wells_to_discard(blanks, cv_limit_percent,
@@ -838,10 +814,22 @@ def blank_report(
         divergent = divergent_blank_wells(blanks, divergence_limit_au)
 
     if len(blanks) < 2:
-        # Gen5 requires two or more wells for "use blank average", and treats a
-        # CV% that cannot be calculated as a failure rather than a pass.
+        # A CV% cannot be calculated from one well, and we treat that as a
+        # failed blanking rather than a pass.
+        #
+        # This is OUR rule, not Gen5's, and the help file misled us about it.
+        # Gen5_LVA_NAQ_0003 and 0005 are single-well blankings from 26 October
+        # 2026 that Gen5 went on to quantify against -- 0003 reports samples at
+        # 436 and 440 ng/uL -- and their Blank Results tables have no CV column
+        # at all. So Gen5 does not refuse a one-well blank; it simply has
+        # nothing to validate and uses it.
+        #
+        # Left as it is, deliberately, because which behaviour is better is a
+        # judgement rather than a fact: a single blank well has no cross-check
+        # of any kind, and this lab's commonest blanking is two. Flagged in
+        # docs/STATUS.md as a decision for the owner, not quietly changed.
         reason = "single"
-    elif judged and max(judged.values()) > cv_limit_percent:
+    elif cv and max(cv.values()) > cv_limit_percent:
         reason = "cv"
     elif dispersion > dispersion_limit_au:
         reason = "dispersion"

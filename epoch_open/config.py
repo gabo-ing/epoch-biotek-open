@@ -13,7 +13,7 @@ executable, and every field is optional.
       },
       "blank_dispersion_limit_au": 0.0025,
       "blank_divergence_limit_au": 0.002,
-      "blank_level_warn_au": 0.010
+      "blank_level_warn_au": 0.020
     }
 
 reader_serial   null (the default) accepts whichever Epoch answers. Set it only
@@ -36,7 +36,7 @@ blank_divergence_limit_au
 blank_level_warn_au
                 how much the blank may absorb at 260 nm, after the 320 nm
                 reference is removed, before the screen says so. Default
-                0.010, about 10 ng/uL at 0.5 mm. It does not block the read:
+                0.020, about 20 ng/uL at 0.5 mm. It does not block the read:
                 Gen5 has no such check at all, and refusing here would be
                 stricter than the instrument's own software.
 
