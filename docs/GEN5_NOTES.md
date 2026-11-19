@@ -454,3 +454,31 @@ absolute floor so a relative measure cannot wave through a blank that
 disagrees by more than the smallest concentration anyone would report. That
 is a change to make deliberately, with the Validation limit (CV%) value in
 hand, not before.
+
+
+## Where we now differ from Gen5, and why, 19 November 2026
+
+One rule, stated plainly, after the noon bench run.
+
+Gen5 judges a blanking on the highest CV% across the wavelengths it read,
+including the 320 nm reference, against its Validation limit of 10. It asks
+only whether the blank wells agree with each other as raw numbers. It never
+asks whether they are clean, and it has nothing like the check below.
+
+We add one gate on top: the sample standard deviation of the **corrected**
+(260 - 320) values must not exceed both 0,0025 AU and 25% of what the blank
+absorbs. CV% on raw absorbance cannot see two different waters on one plate,
+because the 320 background they share swamps the difference between them.
+Gen5_LVA_NAQ_0010 is the measured case: eleven wells it passed at CV 9,08,
+A-D at 0,0070 AU and E-H at 0,0196, carrying about 8 ng/uL of error into every
+A-D sample.
+
+The 25% half was added the same day and is the correction to a mistake of
+ours, not of Gen5's. An absolute AU limit refused a blanking Gen5 would have
+accepted -- 12:31:18, CV 3,93 at 260, SD 0,0028 -- and reddened a clean well,
+because the spread between Take3 spots is a near-constant proportion of the
+level rather than a fixed number of AU. See docs/STATUS.md for the two reads
+that show it.
+
+Everything else matches Gen5 exactly, including the one-well blanking it
+accepts and the arithmetic that backs out of its sample rows at a constant.

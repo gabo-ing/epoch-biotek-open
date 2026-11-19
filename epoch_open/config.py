@@ -12,6 +12,7 @@ executable, and every field is optional.
         "999001": {"A2": 0.5044, "A3": 0.5071}
       },
       "blank_dispersion_limit_au": 0.0025,
+      "blank_dispersion_limit_fraction": 0.25,
       "blank_divergence_limit_au": 0.002,
       "blank_level_warn_au": 0.020
     }
@@ -29,6 +30,13 @@ blank_dispersion_limit_au
                 It replaced blank_spread_limit_au, which was a highest-to-lowest
                 range and so tightened as more wells were blanked; a file still
                 carrying the old key falls back to this default.
+blank_dispersion_limit_fraction
+                the same disagreement as a share of what the blank absorbs.
+                Default 0.25. A blanking is refused only when it exceeds this
+                AND the AU limit above, because the spread between Take3 spots
+                is close to a fixed proportion of the level: on one water it
+                stays near 10-14% however dirty the blank is, and only two
+                different waters on one plate reach 50% or more.
 blank_divergence_limit_au
                 how far one blank well may sit from the middle of the others
                 before it is painted red as the one to wipe. It does not block
@@ -79,6 +87,8 @@ class Config:
     blank_cv_limit_percent: float = quant.BLANK_CV_LIMIT_PERCENT
     reference_limit_od: float = quant.HIGH_REFERENCE_MARGIN
     blank_dispersion_limit_au: float = quant.BLANK_DISPERSION_LIMIT_AU
+    blank_dispersion_limit_fraction: float = (
+        quant.BLANK_DISPERSION_LIMIT_FRACTION)
     blank_divergence_limit_au: float = quant.BLANK_DIVERGENCE_LIMIT_AU
     blank_level_warn_au: float = quant.BLANK_LEVEL_WARN_AU
     # Which language the interface speaks. English by default, because a
@@ -135,6 +145,7 @@ def save(cfg: Config, path: Path | None = None) -> Path:
         "blank_cv_limit_percent": cfg.blank_cv_limit_percent,
         "reference_limit_od": cfg.reference_limit_od,
         "blank_dispersion_limit_au": cfg.blank_dispersion_limit_au,
+        "blank_dispersion_limit_fraction": cfg.blank_dispersion_limit_fraction,
         "blank_divergence_limit_au": cfg.blank_divergence_limit_au,
         "blank_level_warn_au": cfg.blank_level_warn_au,
         "language": cfg.language,
@@ -205,6 +216,9 @@ def load(path: Path | None = None) -> Config:
             "reference_limit_od", quant.HIGH_REFERENCE_MARGIN),
         blank_dispersion_limit_au=positive("blank_dispersion_limit_au",
                                            quant.BLANK_DISPERSION_LIMIT_AU),
+        blank_dispersion_limit_fraction=positive(
+            "blank_dispersion_limit_fraction",
+            quant.BLANK_DISPERSION_LIMIT_FRACTION),
         blank_divergence_limit_au=positive("blank_divergence_limit_au",
                                            quant.BLANK_DIVERGENCE_LIMIT_AU),
         blank_level_warn_au=positive("blank_level_warn_au",

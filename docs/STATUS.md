@@ -439,3 +439,76 @@ One trap, learned the hard way: **the GUI tests return early with no display and
 run still reports every test as passed.** A green 449 from a headless machine has not
 exercised a single window. `tests/test_gui_starts.py` exists to tell "no display" apart
 from "broken" — run the suite where there is a real display before trusting it.
+
+
+## The plate's own spread, 19 November 2026, noon
+
+Bench testing of the Take3 program, the same water on all sixteen spots, read
+twice three minutes apart with nobody touching the plate.
+
+The 12:31:18 blanking was refused for "the wells do not agree": a standard
+deviation of 0,0028 AU against our 0,0025 limit. Its CV% was 3,93 at 260 and
+6,94 at worst, so Gen5 would have accepted it without comment. H2 went red and
+the screen said to wipe it. H2 was not dirty.
+
+What the pair of reads shows:
+
+| read | mean 260-320 | SD | share |
+|---|---|---|---|
+| blank, 12:31 | 0,0267 AU | 0,00277 | 10,4% |
+| samples, 12:34 | 0,0199 AU | 0,00227 | 11,4% |
+
+The well-by-well ranking is identical between them, Spearman 1,00 -- a smooth
+ramp from A3 at 0,0229 up to H2 at 0,0320, column 2 above column 3 all the way
+down -- while the 320 nm reference moved by 0,0001 AU, SD 0,0001. That is a
+fixed geometric pattern across the microspots of plate 243819, about 30% from
+end to end, multiplied by whatever the water in them absorbs. It is not dirt
+in particular wells, and no amount of wiping will remove it.
+
+So the disagreement between blank wells is close to a fixed **share** of the
+level, not a fixed number of AU, and an absolute limit is really a second
+dirtiness test that says the wrong thing about why it fired. Across every
+blanking where both can be measured:
+
+| blanking | level | SD | share | right answer |
+|---|---|---|---|---|
+| 0001, one water, 8 wells | 0,0063 | 0,00089 | 14,2% | accept |
+| noon, one water, 16 wells | 0,0267 | 0,00277 | 10,4% | accept |
+| 0010, two waters, 16 wells | 0,0133 | 0,00703 | 52,8% | refuse |
+| 0012, two waters, 16 wells | 0,0217 | 0,01618 | 74,6% | refuse |
+
+One water on the plate holds 10-14% however filthy it is; two different waters
+reach 50-75%. A blanking is now refused only when the spread exceeds **both**
+0,0025 AU and 25% of the level. That calls all four correctly where the AU
+limit alone got the noon one wrong. The AU floor stays because a share means
+nothing as the level approaches zero. (0001's share comes from a three-decimal
+Gen5 column and is coarse; the noon pair is ours and is not.)
+
+### The level decays on its own
+
+The same run settled something else. The plate was **not** cleaned between
+12:31 and the 12:38:37 re-blanking, which came up VALID at CV 4,426% with no
+dirty-blank warning. The level simply fell -- 0,0267 at 12:31, 0,0199 at 12:34,
+under 0,020 by 12:38 -- while 320 nm held still. A chromophore in the water
+does not fade in seven minutes. The likeliest causes are the reader warming up
+at 260 nm or the drops settling after pipetting, and the two have not yet been
+told apart.
+
+This is the other half of the argument for the share. An absolute limit flips
+from refuse to accept on that drift alone; the share held at 10-11% across it.
+
+**Worth an experiment:** blank the plate the moment the reader wakes, then
+again every few minutes without touching it, and watch the level. If it falls
+toward the 0,006 AU of a clean tube, the first blanking of the day is the one
+not to trust. The empty-carrier read already on the list would separate the
+reader from the liquid outright.
+
+### Still open: the red paint has the same flaw
+
+`BLANK_DIVERGENCE_LIMIT_AU`, which decides only which wells are painted red,
+is still an absolute 0,002 AU. On the noon blanking it reddens five wells --
+A3, B2, B3, H2, H3 -- which are just the two ends of that fixed ramp. The
+dirty-blank sentence now outranks the red-well sentence so the words on screen
+are right, but the paint still points at innocent spots. The same share would
+fix it. Left alone deliberately: it changes which wells go red in every
+blanking, and it blocks nothing, so it is a separate decision.

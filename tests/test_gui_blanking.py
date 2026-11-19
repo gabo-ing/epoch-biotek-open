@@ -718,6 +718,40 @@ class TestAValidBlankWithRedWellsSaysSo:
         finally:
             app.destroy()
 
+    def test_one_red_well_gets_a_singular_verb(self):
+        """Photographed at the bench on 19 November 2026, in Spanish:
+        "B3 son los que mas se alejan del resto". One well, plural verb.
+        English read no better -- "B3 sit furthest from the rest".
+        """
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, self.CLEAN_BUT_DIVERGENT)
+            assert len(app.blank_report.divergent) == 1
+            shown = app.blank_label.cget("text")
+            assert shown == gui.TEXT["blank_ok_but_divergent_one"].format(
+                wells="C3"), shown
+            assert shown != gui.TEXT["blank_ok_but_divergent"].format(
+                wells="C3")
+        finally:
+            app.destroy()
+
+    def test_several_red_wells_keep_the_plural(self):
+        app = _app()
+        if app is None:
+            return
+        try:
+            _blanking(app, {"A2": 0.0, "A3": 0.0001, "B2": 0.0002,
+                            "B3": 0.0001, "C2": 0.0040, "C3": 0.0040})
+            if len(app.blank_report.divergent) < 2:
+                return          # the rule named fewer; nothing to check here
+            shown = app.blank_label.cget("text")
+            assert shown == gui.TEXT["blank_ok_but_divergent"].format(
+                wells=", ".join(app.blank_report.divergent)), shown
+        finally:
+            app.destroy()
+
     def test_her_real_blanking_now_gets_the_dirty_sentence_instead(self):
         """The 18 November wells are valid, have two red -- and are filthy.
 

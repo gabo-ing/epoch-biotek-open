@@ -181,6 +181,10 @@ _EN_TEXT = {
                                "sit furthest from the rest (in red): wipe "
                                "those spots if you want a tighter blank, or "
                                "carry on."),
+    "blank_ok_but_divergent_one": ("Blank VALID -- you can read samples. "
+                                   "{wells} sits furthest from the rest (in "
+                                   "red): wipe that spot if you want a "
+                                   "tighter blank, or carry on."),
     "blank_ok_but_dirty": ("Blank VALID -- you can read samples -- but the "
                            "blank itself absorbs {level} AU, about "
                            "{ngul} ng/uL, and that is subtracted from "
@@ -369,6 +373,10 @@ _ES_TEXT = {
                                "{wells} son los que mas se alejan del resto "
                                "(en rojo): limpia esos puntos si quieres un "
                                "blanco mas ajustado, o sigue adelante."),
+    "blank_ok_but_divergent_one": ("Blanco VALIDO: ya puedes leer muestras. "
+                                   "{wells} es el que mas se aleja del resto "
+                                   "(en rojo): limpia ese punto si quieres un "
+                                   "blanco mas ajustado, o sigue adelante."),
     "blank_ok_but_dirty": ("Blanco VALIDO: ya puedes leer muestras, pero el "
                            "blanco mismo absorbe {level} AU, unos {ngul} "
                            "ng/uL, y eso se resta de todas ellas. Usa agua "
@@ -909,6 +917,7 @@ class App(ScreenFit, tk.Tk):
             CONFIG.blank_cv_limit_percent,
             CONFIG.blank_dispersion_limit_au,
             CONFIG.blank_divergence_limit_au,
+            CONFIG.blank_dispersion_limit_fraction,
         ) if kept else None
 
     def _blank_ok(self) -> bool:
@@ -1080,8 +1089,14 @@ class App(ScreenFit, tk.Tk):
                     # VALID beside it, but green would be a lie.
                     style="Warn.TLabel")
             elif self.blank_report and self.blank_report.divergent:
+                # One well needs a singular verb. Spanish showed this up on
+                # 19 November 2026 -- "B3 son los que mas se alejan" -- and
+                # English read no better.
+                key = ("blank_ok_but_divergent_one"
+                       if len(self.blank_report.divergent) == 1
+                       else "blank_ok_but_divergent")
                 self.blank_label.configure(
-                    text=TEXT["blank_ok_but_divergent"].format(
+                    text=TEXT[key].format(
                         wells=", ".join(self.blank_report.divergent)),
                     # Good, not Bad: the blank passed. Red paint on a well
                     # is advice about a spot, and colouring the sentence as

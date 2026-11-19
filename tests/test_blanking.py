@@ -859,3 +859,148 @@ class TestTheBlankingsGen5Refused:
         for data in (self.AT_0938, self.AT_0947):
             report = quant.blank_report(self._wells(data))
             assert report.cv_percent[260] > quant.BLANK_CV_LIMIT_PERCENT
+
+
+class TestTheSpreadIsAShareOfTheLevelNotANumberOfAU:
+    """The noon run of 19 November 2026, and why an AU limit alone is wrong.
+
+    Plate 243819 was read twice over three minutes, the same sixteen drops of
+    the same water, nobody touching it in between: once as a blanking at
+    12:31:18 and once as samples at 12:34. epoch-open refused the first for
+    "the wells do not agree", SD 0,0028 AU against the 0,0025 limit, painted
+    H2 red and told the technician to wipe it. H2 was not dirty.
+
+    What the two reads show, side by side:
+
+      blank  12:31   mean 0,0267 AU   SD 0,00277   10,4%
+      sample 12:34   mean 0,0199 AU   SD 0,00227   11,4%
+
+    The well-by-well ranking of the two is identical -- Spearman 1,00, a
+    smooth ramp from A3 at 0,0229 to H2 at 0,0320, column 2 above column 3
+    all the way down -- while the 320 nm reference moved by 0,0001 AU. That
+    is a fixed geometric pattern across the microspots, multiplied by
+    whatever the water absorbs. Not dirt in particular wells.
+
+    So the spread is a share of the level, and a limit in AU is really a
+    second dirtiness test wearing a disguise: it fires on a dirty blank, says
+    the wrong thing about why, and names an innocent well. The share tells
+    the two apart, because one water on the plate stays near 10-14% however
+    filthy it is and only two different waters reach 50%.
+
+    The level fell from 0,0267 to under 0,020 in the seven minutes to the
+    12:38 re-blanking with the plate untouched, which is the other half of
+    the argument: an AU limit flips from refuse to accept on that drift while
+    the share holds steady.
+    """
+
+    # The Blanco sheet of cuantificacion_20261119_1234.xlsx, 260 and 320 raw.
+    BLANK = {
+        "A2": (0.0713, 0.0470), "A3": (0.0718, 0.0489),
+        "B2": (0.0644, 0.0406), "B3": (0.0648, 0.0426),
+        "C2": (0.0676, 0.0423), "C3": (0.0702, 0.0456),
+        "D2": (0.0694, 0.0421), "D3": (0.0677, 0.0416),
+        "E2": (0.0731, 0.0463), "E3": (0.0664, 0.0385),
+        "F2": (0.0707, 0.0435), "F3": (0.0666, 0.0387),
+        "G2": (0.0695, 0.0412), "G3": (0.0704, 0.0421),
+        "H2": (0.0725, 0.0405), "H3": (0.0719, 0.0404),
+    }
+    # The same wells read as samples three minutes later.
+    SAMPLES = {
+        "A2": (0.0653, 0.0468), "A3": (0.0655, 0.0487),
+        "B2": (0.0584, 0.0405), "B3": (0.0585, 0.0428),
+        "C2": (0.0610, 0.0422), "C3": (0.0639, 0.0455),
+        "D2": (0.0627, 0.0420), "D3": (0.0607, 0.0414),
+        "E2": (0.0660, 0.0462), "E3": (0.0592, 0.0384),
+        "F2": (0.0636, 0.0435), "F3": (0.0595, 0.0386),
+        "G2": (0.0622, 0.0410), "G3": (0.0631, 0.0421),
+        "H2": (0.0648, 0.0404), "H3": (0.0640, 0.0403),
+    }
+
+    def _wells(self, table):
+        return {n: RawWell(well=n, readings={260: v[0], 320: v[1]})
+                for n, v in table.items()}
+
+    def test_the_blanking_that_was_refused_now_passes(self):
+        report = blank_report(self._wells(self.BLANK))
+        assert report.valid, report.reason
+        assert report.reason == ""
+
+    def test_it_was_refused_on_the_absolute_limit_alone(self):
+        """The AU floor is still exceeded; only the share rescues it."""
+        wells = self._wells(self.BLANK)
+        assert quant.blank_dispersion(wells) > BLANK_DISPERSION_LIMIT_AU
+        assert not quant.dispersion_is_excessive(wells)
+
+    def test_the_share_is_the_same_in_both_reads(self):
+        """Proportional to the level, which is the whole claim."""
+        shares = []
+        for table in (self.BLANK, self.SAMPLES):
+            wells = self._wells(table)
+            shares.append(quant.blank_dispersion(wells)
+                          / quant.blank_level(wells))
+        assert all(0.09 < s < 0.13 for s in shares), shares
+        assert abs(shares[0] - shares[1]) < 0.02
+
+    def test_the_real_problem_is_still_said_out_loud(self):
+        """Passing is not the same as being quiet about it."""
+        report = blank_report(self._wells(self.BLANK))
+        assert report.level_is_high()
+        kinds = [w.code for w in quant.check_blanks(self._wells(self.BLANK))]
+        assert "blank_level" in kinds
+        assert "blank_dispersion" not in kinds
+
+    def test_the_eleven_wells_he_fell_back_to_pass_too(self):
+        """His workaround was never necessary, and still works."""
+        kept = {n: v for n, v in self.BLANK.items()
+                if n not in {"A3", "B2", "B3", "H2", "H3"}}
+        report = blank_report(self._wells(kept))
+        assert report.valid
+        assert report.level_is_high()
+
+
+class TestTheShareDoesNotRescueARealDisagreement:
+    """The gate has to keep catching what it was built for."""
+
+    def test_two_waters_on_one_plate_are_still_refused(self):
+        """The shape of Gen5_LVA_NAQ_0010: 0,0070 AU against 0,0196.
+
+        Built on a high 320 background on purpose, so the CV% on raw
+        absorbance stays well inside 10 and the disagreement limit is the
+        only thing that can refuse it. That is the case the limit exists for.
+        """
+        wells = {}
+        for i, name in enumerate(["A2", "A3", "B2", "D2"]):
+            wells[name] = RawWell(well=name,
+                                  readings={260: 0.5000 + i * 0.0001,
+                                            320: 0.4930 + i * 0.0001})
+        for i, name in enumerate(["E2", "E3", "F2", "F3", "G2", "G3", "H3"]):
+            wells[name] = RawWell(well=name,
+                                  readings={260: 0.5120 + i * 0.0001,
+                                            320: 0.4924 + i * 0.0001})
+        report = blank_report(wells)
+        assert max(report.cv_percent.values()) < 10.0
+        assert quant.blank_dispersion(wells) / quant.blank_level(wells) > 0.25
+        assert quant.dispersion_is_excessive(wells)
+        assert not report.valid
+        assert report.reason == "dispersion"
+
+    def test_a_faint_blank_is_judged_on_au_alone(self):
+        """A ratio means nothing as the level approaches zero."""
+        wells = {
+            "A2": RawWell(well="A2", readings={260: 0.0401, 320: 0.0400}),
+            "A3": RawWell(well="A3", readings={260: 0.0404, 320: 0.0400}),
+        }
+        # Well under the AU floor, but 57% of a level of 0,00025.
+        assert quant.blank_dispersion(wells) < BLANK_DISPERSION_LIMIT_AU
+        assert not quant.dispersion_is_excessive(wells)
+        assert blank_report(wells).valid
+
+    def test_a_blank_reading_below_its_reference_falls_back_to_au(self):
+        """No positive level, so there is no share to take."""
+        wells = {
+            "A2": RawWell(well="A2", readings={260: 0.0400, 320: 0.0450}),
+            "A3": RawWell(well="A3", readings={260: 0.0450, 320: 0.0450}),
+        }
+        assert quant.blank_level(wells) <= 0
+        assert quant.blank_dispersion(wells) > BLANK_DISPERSION_LIMIT_AU
+        assert quant.dispersion_is_excessive(wells)

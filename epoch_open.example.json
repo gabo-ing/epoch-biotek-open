@@ -22,11 +22,12 @@
     }
   },
 
-    "_blank_comment": "How the blanking verdict is judged. blank_cv_limit_percent is Gen5's own rule and its default: the highest CV% across the wavelengths read, on raw absorbances, including the 320 nm reference -- confirmed 19 November 2026 against Gen5's own Blank Results tables. The three _au limits are ours. blank_dispersion_limit_au is an absolute floor under the CV% check, as a standard deviation between the blank wells, so it means the same whether two wells were blanked or all of them. blank_divergence_limit_au only decides which well is painted red, not whether the blank passes. blank_level_warn_au only prints a sentence: it is how absorbent the blank itself is, which Gen5 never checks at all -- it accepted one at 0.0382 AU -- and refusing on it would be stricter than Gen5. See docs/GEN5_NOTES.md.",
+    "_blank_comment": "How the blanking verdict is judged. blank_cv_limit_percent is Gen5's own rule and its default: the highest CV% across the wavelengths read, on raw absorbances, including the 320 nm reference -- confirmed 19 November 2026 against Gen5's own Blank Results tables. The three _au limits are ours. blank_dispersion_limit_au is an absolute floor under the CV% check, as a standard deviation between the blank wells, so it means the same whether two wells were blanked or all of them; it refuses only together with blank_dispersion_limit_fraction, the same spread as a share of what the blank absorbs, because the Take3 spots differ from each other by a near constant proportion -- 10-14% on one water however dirty, 50% or more only when two different waters are on the plate. blank_divergence_limit_au only decides which well is painted red, not whether the blank passes. blank_level_warn_au only prints a sentence: it is how absorbent the blank itself is, which Gen5 never checks at all -- it accepted one at 0.0382 AU -- and refusing on it would be stricter than Gen5. See docs/GEN5_NOTES.md.",
 
   "blank_cv_limit_percent": 10.0,
   "reference_limit_od": 0.1,
   "blank_dispersion_limit_au": 0.0025,
+  "blank_dispersion_limit_fraction": 0.25,
 
   "blank_divergence_limit_au": 0.003,
   "blank_level_warn_au": 0.02

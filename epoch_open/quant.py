@@ -574,6 +574,47 @@ BLANK_CV_LIMIT_PERCENT = 10.0
 # it is far out in the tail is the point: this is a floor, not the gate.
 BLANK_DISPERSION_LIMIT_AU = 0.0025
 
+# The limit above is in AU, and on 19 November 2026 the plate showed why that
+# cannot be the whole test. The spread between the wells is not a fixed number
+# of AU: it is close to a fixed *fraction* of whatever the blank absorbs,
+# because the Take3 microspots differ from one another by a constant
+# proportion and that proportion multiplies the level.
+#
+# Measured on plate 243819 at noon that day, two reads of the same sixteen
+# drops three minutes apart:
+#
+#   blank  12:31   mean 0.0267 AU   SD 0.00277   10.4%
+#   sample 12:34   mean 0.0199 AU   SD 0.00227   11.4%
+#
+# The well-by-well ranking of the two reads was identical -- Spearman 1.00,
+# a smooth ramp from A3 at 0.0229 to H2 at 0.0320, column 2 above column 3
+# throughout -- while 320 nm moved by 0.0001 AU. A fixed geometric pattern,
+# scaled by the level, not dirt in particular spots.
+#
+# So an absolute limit refuses a dirty blank twice: once for being dirty,
+# correctly, and once for "the wells disagree", which is false and sends her
+# to wipe a well that is clean. The fraction tells the two apart:
+#
+#   0001, one water, 8 wells      0.0063 AU   SD 0.00089   14.2%   accept
+#   noon, one water, 16 wells     0.0267 AU   SD 0.00277   10.4%   accept
+#   0010, two waters, 16 wells    0.0133 AU   SD 0.00703   52.8%   refuse
+#   0012, two waters, 16 wells    0.0217 AU   SD 0.01618   74.6%   refuse
+#
+# One water on the plate gives 10-14% however dirty it is; two different
+# waters give 50-75%. 0.25 sits in the gap, nearer the real failures than the
+# passes. (0001 comes from a three-decimal Gen5 column, so its 14.2% is
+# coarse; the noon pair is ours and is not.)
+#
+# The AU limit stays as a floor underneath this, because a ratio cannot be
+# trusted as the level approaches zero: a spotless blank at 0.001 AU with a
+# 0.0004 SD is 40% and means nothing. A blanking is refused only when it fails
+# both. That also makes the verdict stable while the reader warms up, which
+# the same noon run showed it must be -- the level fell from 0.0267 to under
+# 0.020 in seven minutes with nobody touching the plate, dragging the SD down
+# with it, and an absolute limit alone flips from refuse to accept on that
+# drift while the fraction holds at 11%.
+BLANK_DISPERSION_LIMIT_FRACTION = 0.25
+
 
 # How absorbent the blank may be before the screen says something, measured on
 # the corrected (260 - 320) mean of the blank wells themselves.
@@ -691,10 +732,35 @@ class BlankReport:
         return self.level_au > limit_au
 
 
+def dispersion_is_excessive(
+    blanks: dict[str, RawWell],
+    dispersion_limit_au: float = BLANK_DISPERSION_LIMIT_AU,
+    dispersion_limit_fraction: float = BLANK_DISPERSION_LIMIT_FRACTION,
+) -> bool:
+    """Whether the blank wells disagree by more than the plate's own spread.
+
+    Both limits have to be exceeded. The AU one is the floor, for a blank too
+    faint for a ratio to mean anything; the fraction is what actually tells a
+    dirty-but-uniform blank from two different waters on one plate. See
+    BLANK_DISPERSION_LIMIT_FRACTION for the measurements behind that.
+
+    A blank whose level is zero or negative has no fraction to speak of, so
+    the AU limit decides alone.
+    """
+    sd = blank_dispersion(blanks)
+    if sd <= dispersion_limit_au:
+        return False
+    level = blank_level(blanks)
+    if level <= 0:
+        return True
+    return sd > dispersion_limit_fraction * level
+
+
 def wells_to_discard(
     blanks: dict[str, RawWell],
     cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
     dispersion_limit_au: float = BLANK_DISPERSION_LIMIT_AU,
+    dispersion_limit_fraction: float = BLANK_DISPERSION_LIMIT_FRACTION,
 ) -> set[str]:
     """Which wells would have to go for the rest to agree.
 
@@ -740,7 +806,8 @@ def wells_to_discard(
                                           for b in wells.values()))}
         if cv and max(cv.values()) > cv_limit_percent:
             return False
-        return blank_dispersion(wells) <= dispersion_limit_au
+        return not dispersion_is_excessive(wells, dispersion_limit_au,
+                                           dispersion_limit_fraction)
 
     while len(kept) > 2:
         if passes(kept):
@@ -763,6 +830,7 @@ def blank_report(
     cv_limit_percent: float = BLANK_CV_LIMIT_PERCENT,
     dispersion_limit_au: float = BLANK_DISPERSION_LIMIT_AU,
     divergence_limit_au: float = BLANK_DIVERGENCE_LIMIT_AU,
+    dispersion_limit_fraction: float = BLANK_DISPERSION_LIMIT_FRACTION,
 ) -> BlankReport:
     """Judge a set of blank wells the way Gen5 does.
 
@@ -772,9 +840,12 @@ def blank_report(
 
     `dispersion_limit_au` is a floor underneath it, for the case a ratio cannot
     see: a blank on a high background can keep its CV% respectable while its
-    wells disagree by an absolute amount that matters at 0.5 mm. Neither limit
-    depends on how many wells were blanked, so blanking every well before using
-    it is judged the same way as blanking two.
+    wells disagree by an absolute amount that matters at 0.5 mm. It refuses
+    only together with `dispersion_limit_fraction`, since the spread between
+    Take3 spots is close to a fixed proportion of the level and an AU limit
+    alone mistakes a dirty blank for wells that disagree. Neither limit depends
+    on how many wells were blanked, so blanking every well before using it is
+    judged the same way as blanking two.
 
     A well that sits well away from the others is still named in `divergent`
     and painted red, but that alone no longer blocks the run. It tells her
@@ -805,11 +876,13 @@ def blank_report(
     # distance-from-the-median rule -- the rule that reddens all four wells on
     # two clean spots and two smudged ones, which is the case it was retired
     # for. Caught on 18 November 2026 while reading a saved blank back.
-    failing = (bool(cv) and max(cv.values()) > cv_limit_percent) \
-        or dispersion > dispersion_limit_au
+    scattered = dispersion_is_excessive(blanks, dispersion_limit_au,
+                                        dispersion_limit_fraction)
+    failing = (bool(cv) and max(cv.values()) > cv_limit_percent) or scattered
     if failing:
         divergent = wells_to_discard(blanks, cv_limit_percent,
-                                     dispersion_limit_au)
+                                     dispersion_limit_au,
+                                     dispersion_limit_fraction)
     else:
         divergent = divergent_blank_wells(blanks, divergence_limit_au)
 
@@ -832,7 +905,7 @@ def blank_report(
         reason = ""
     elif cv and max(cv.values()) > cv_limit_percent:
         reason = "cv"
-    elif dispersion > dispersion_limit_au:
+    elif scattered:
         reason = "dispersion"
     else:
         reason = ""
@@ -866,9 +939,8 @@ def check_blanks(blanks: dict[str, RawWell]) -> list["Warning_"]:
     if len(blanks) < 2:
         return warnings
 
-    dispersion = blank_dispersion(blanks)
-    if dispersion > BLANK_DISPERSION_LIMIT_AU:
-        warnings.append(warn("blank_dispersion", sd=dispersion,
+    if dispersion_is_excessive(blanks):
+        warnings.append(warn("blank_dispersion", sd=blank_dispersion(blanks),
                              cv=blank_cv_percent(blanks, 260)))
     return warnings
 
